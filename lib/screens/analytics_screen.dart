@@ -1,4 +1,4 @@
-// Analytics Screen Implementation
+// Responsive Analytics Screen Implementation
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -34,6 +34,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   @override
   Widget build(BuildContext context) {
     final habitData = Provider.of<HabitDataProvider>(context);
+    final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
       appBar: AppBar(
@@ -41,10 +42,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.trending_up), text: 'Trends'),
-            Tab(icon: Icon(Icons.pie_chart), text: 'Categories'),
-            Tab(icon: Icon(Icons.emoji_events), text: 'Achievements'),
+          tabs: [
+            Tab(
+              icon: Icon(
+                Icons.trending_up,
+                size: screenSize.width < 400 ? 20 : 24,
+              ),
+              text: 'Trends',
+            ),
+            Tab(
+              icon: Icon(
+                Icons.pie_chart,
+                size: screenSize.width < 400 ? 20 : 24,
+              ),
+              text: 'Categories',
+            ),
+            Tab(
+              icon: Icon(
+                Icons.emoji_events,
+                size: screenSize.width < 400 ? 20 : 24,
+              ),
+              text: 'Achievements',
+            ),
           ],
         ),
         actions: [
@@ -112,69 +131,83 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildTrendsTab(habitData),
-          _buildCategoriesTab(habitData),
-          _buildAchievementsTab(habitData),
+          _buildTrendsTab(habitData, screenSize),
+          _buildCategoriesTab(habitData, screenSize),
+          _buildAchievementsTab(habitData, screenSize),
         ],
       ),
     );
   }
 
-  Widget _buildTrendsTab(HabitDataProvider habitData) {
+  Widget _buildTrendsTab(HabitDataProvider habitData, Size screenSize) {
     final trendsData = _getTrendsData(habitData);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(screenSize.width * 0.04),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Overall Progress Chart
-          _buildOverallProgressChart(trendsData),
+          _buildOverallProgressChart(trendsData, screenSize),
 
-          const SizedBox(height: 24),
+          SizedBox(height: screenSize.height * 0.03),
 
           // Streaks Card
-          _buildStreaksCard(habitData),
+          _buildStreaksCard(habitData, screenSize),
 
-          const SizedBox(height: 24),
+          SizedBox(height: screenSize.height * 0.03),
 
           // Daily Consistency
-          _buildConsistencyChart(trendsData),
+          _buildConsistencyChart(trendsData, screenSize),
 
-          const SizedBox(height: 24),
+          SizedBox(height: screenSize.height * 0.03),
 
           // Progress Insights
-          _buildProgressInsights(trendsData),
+          _buildProgressInsights(trendsData, screenSize),
+
+          // Bottom padding
+          SizedBox(height: screenSize.height * 0.02),
         ],
       ),
     );
   }
 
-  Widget _buildOverallProgressChart(List<TrendData> trendsData) {
+  Widget _buildOverallProgressChart(
+    List<TrendData> trendsData,
+    Size screenSize,
+  ) {
+    // Responsive chart height
+    final chartHeight = screenSize.height < 600 ? 200.0 : 250.0;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(screenSize.width * 0.05),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Overall Progress',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    'Overall Progress',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: screenSize.width < 400 ? 18 : 22,
+                    ),
+                  ),
                 ),
                 Text(
                   'Last $_selectedTimeRange days',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: screenSize.width < 400 ? 10 : 12,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: screenSize.height * 0.03),
             SizedBox(
-              height: 250,
+              height: chartHeight,
               child: LineChart(
                 LineChartData(
                   gridData: FlGridData(
@@ -209,7 +242,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                             axisSide: meta.axisSide,
                             child: Text(
                               DateFormat('MM/dd').format(date),
-                              style: Theme.of(context).textTheme.bodySmall,
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(
+                                fontSize: screenSize.width < 400 ? 8 : 10,
+                              ),
                             ),
                           );
                         },
@@ -219,11 +256,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       sideTitles: SideTitles(
                         showTitles: true,
                         interval: 20,
-                        reservedSize: 40,
+                        reservedSize: screenSize.width < 400 ? 35 : 40,
                         getTitlesWidget: (double value, TitleMeta meta) {
                           return Text(
                             '${value.toInt()}%',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(
+                              fontSize: screenSize.width < 400 ? 8 : 10,
+                            ),
                           );
                         },
                       ),
@@ -254,7 +295,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           Theme.of(context).colorScheme.primary,
                         ],
                       ),
-                      barWidth: 3,
+                      barWidth: screenSize.width < 400 ? 2 : 3,
                       isStrokeCapRound: true,
                       dotData: FlDotData(show: false),
                       belowBarData: BarAreaData(
@@ -283,45 +324,83 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  Widget _buildStreaksCard(HabitDataProvider habitData) {
+  Widget _buildStreaksCard(HabitDataProvider habitData, Size screenSize) {
     final streaks = _calculateStreaks(habitData);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(screenSize.width * 0.05),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Current Streaks',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStreakItem(
-                  'Best Streak',
-                  '${streaks['bestStreak']} days',
-                  Icons.local_fire_department,
-                  Colors.orange,
+            SizedBox(height: screenSize.height * 0.02),
+
+            // Responsive layout for streaks
+            screenSize.width > 600
+                ? Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildStreakItem(
+                      'Best Streak',
+                      '${streaks['bestStreak']} days',
+                      Icons.local_fire_department,
+                      Colors.orange,
+                      screenSize,
+                    ),
+                    _buildStreakItem(
+                      'Current Streak',
+                      '${streaks['currentStreak']} days',
+                      Icons.flash_on,
+                      Colors.blue,
+                      screenSize,
+                    ),
+                    _buildStreakItem(
+                      'Total Days',
+                      '${streaks['totalDays']} days',
+                      Icons.calendar_today,
+                      Colors.green,
+                      screenSize,
+                    ),
+                  ],
+                )
+                : Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildStreakItem(
+                          'Best Streak',
+                          '${streaks['bestStreak']} days',
+                          Icons.local_fire_department,
+                          Colors.orange,
+                          screenSize,
+                        ),
+                        _buildStreakItem(
+                          'Current Streak',
+                          '${streaks['currentStreak']} days',
+                          Icons.flash_on,
+                          Colors.blue,
+                          screenSize,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: screenSize.height * 0.02),
+                    _buildStreakItem(
+                      'Total Days',
+                      '${streaks['totalDays']} days',
+                      Icons.calendar_today,
+                      Colors.green,
+                      screenSize,
+                    ),
+                  ],
                 ),
-                _buildStreakItem(
-                  'Current Streak',
-                  '${streaks['currentStreak']} days',
-                  Icons.flash_on,
-                  Colors.blue,
-                ),
-                _buildStreakItem(
-                  'Total Days',
-                  '${streaks['totalDays']} days',
-                  Icons.calendar_today,
-                  Colors.green,
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -333,48 +412,61 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     String value,
     IconData icon,
     Color color,
+    Size screenSize,
   ) {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(screenSize.width < 400 ? 10 : 12),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: color, size: 28),
+          child: Icon(
+            icon,
+            color: color,
+            size: screenSize.width < 400 ? 24 : 28,
+          ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: screenSize.height * 0.01),
         Text(
           value,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: color,
+            fontSize: screenSize.width < 400 ? 14 : 16,
           ),
         ),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontSize: screenSize.width < 400 ? 10 : 12,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildConsistencyChart(List<TrendData> trendsData) {
+  Widget _buildConsistencyChart(List<TrendData> trendsData, Size screenSize) {
     final consistencyData = _getConsistencyData(trendsData);
+    final chartHeight = screenSize.height < 600 ? 180.0 : 200.0;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(screenSize.width * 0.05),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Daily Consistency',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: screenSize.height * 0.02),
             SizedBox(
-              height: 200,
+              height: chartHeight,
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
@@ -397,6 +489,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           '$day\n${rod.toY.round()}%',
                           TextStyle(
                             color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: screenSize.width < 400 ? 10 : 12,
                           ),
                         );
                       },
@@ -419,7 +512,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                             axisSide: meta.axisSide,
                             child: Text(
                               days[value.toInt()],
-                              style: Theme.of(context).textTheme.bodySmall,
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(
+                                fontSize: screenSize.width < 400 ? 10 : 12,
+                              ),
                             ),
                           );
                         },
@@ -429,10 +526,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       sideTitles: SideTitles(
                         showTitles: true,
                         interval: 25,
+                        reservedSize: screenSize.width < 400 ? 35 : 40,
                         getTitlesWidget: (double value, TitleMeta meta) {
                           return Text(
                             '${value.toInt()}%',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(
+                              fontSize: screenSize.width < 400 ? 8 : 10,
+                            ),
                           );
                         },
                       ),
@@ -456,7 +558,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                                 begin: Alignment.bottomCenter,
                                 end: Alignment.topCenter,
                               ),
-                              width: 20,
+                              width: screenSize.width < 400 ? 18 : 20,
                               borderRadius: const BorderRadius.only(
                                 topLeft: Radius.circular(4),
                                 topRight: Radius.circular(4),
@@ -474,45 +576,54 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  Widget _buildCategoriesTab(HabitDataProvider habitData) {
+  Widget _buildCategoriesTab(HabitDataProvider habitData, Size screenSize) {
     final categoryData = _getCategoryPerformanceData(habitData);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(screenSize.width * 0.04),
       child: Column(
         children: [
           // Category Performance Pie Chart
-          _buildCategoryPieChart(categoryData),
+          _buildCategoryPieChart(categoryData, screenSize),
 
-          const SizedBox(height: 24),
+          SizedBox(height: screenSize.height * 0.03),
 
           // Category Details
-          _buildCategoryDetails(habitData, categoryData),
+          _buildCategoryDetails(habitData, categoryData, screenSize),
+
+          // Bottom padding
+          SizedBox(height: screenSize.height * 0.02),
         ],
       ),
     );
   }
 
-  Widget _buildCategoryPieChart(Map<HabitCategory, double> categoryData) {
+  Widget _buildCategoryPieChart(
+    Map<HabitCategory, double> categoryData,
+    Size screenSize,
+  ) {
+    final chartSize = screenSize.height < 600 ? 200.0 : 250.0;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(screenSize.width * 0.05),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Category Performance',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: screenSize.height * 0.03),
             SizedBox(
-              height: 250,
+              height: chartSize,
               child: PieChart(
                 PieChartData(
                   sectionsSpace: 2,
-                  centerSpaceRadius: 50,
+                  centerSpaceRadius: screenSize.width < 400 ? 40 : 50,
                   sections:
                       categoryData.entries.map((entry) {
                         final category = entry.key;
@@ -521,9 +632,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           color: category.color,
                           value: performance,
                           title: '${performance.toStringAsFixed(1)}%',
-                          radius: 80,
-                          titleStyle: const TextStyle(
-                            fontSize: 12,
+                          radius: screenSize.width < 400 ? 70 : 80,
+                          titleStyle: TextStyle(
+                            fontSize: screenSize.width < 400 ? 10 : 12,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -532,10 +643,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: screenSize.height * 0.02),
             Wrap(
-              spacing: 16,
-              runSpacing: 8,
+              spacing: screenSize.width * 0.04,
+              runSpacing: screenSize.height * 0.01,
               children:
                   categoryData.entries.map((entry) {
                     return Row(
@@ -546,10 +657,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           height: 12,
                           color: entry.key.color,
                         ),
-                        const SizedBox(width: 4),
+                        SizedBox(width: screenSize.width * 0.01),
                         Text(
                           entry.key.nameEn,
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
+                            fontSize: screenSize.width < 400 ? 10 : 12,
+                          ),
                         ),
                       ],
                     );
@@ -564,6 +679,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   Widget _buildCategoryDetails(
     HabitDataProvider habitData,
     Map<HabitCategory, double> categoryData,
+    Size screenSize,
   ) {
     return Column(
       children:
@@ -572,11 +688,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             final performance = entry.value;
 
             return Card(
-              margin: const EdgeInsets.only(bottom: 12),
+              margin: EdgeInsets.only(bottom: screenSize.height * 0.015),
               child: ListTile(
-                leading: Icon(category.icon, color: category.color, size: 32),
-                title: Text(category.nameAr),
-                subtitle: Text(category.nameEn),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: screenSize.width * 0.04,
+                  vertical: screenSize.height * 0.01,
+                ),
+                leading: Icon(
+                  category.icon,
+                  color: category.color,
+                  size: screenSize.width < 400 ? 28 : 32,
+                ),
+                title: Text(
+                  category.nameAr,
+                  style: TextStyle(fontSize: screenSize.width < 400 ? 14 : 16),
+                ),
+                subtitle: Text(
+                  category.nameEn,
+                  style: TextStyle(fontSize: screenSize.width < 400 ? 12 : 14),
+                ),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -585,10 +715,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: category.color,
+                        fontSize: screenSize.width < 400 ? 14 : 16,
                       ),
                     ),
+                    SizedBox(height: screenSize.height * 0.005),
                     Container(
-                      width: 60,
+                      width: screenSize.width < 400 ? 50 : 60,
                       height: 4,
                       decoration: BoxDecoration(
                         color: category.color.withOpacity(0.3),
@@ -613,58 +745,72 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  Widget _buildAchievementsTab(HabitDataProvider habitData) {
+  Widget _buildAchievementsTab(HabitDataProvider habitData, Size screenSize) {
     final achievements = _getAchievements(habitData);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(screenSize.width * 0.04),
       child: Column(
         children: [
           // Achievement Stats
-          _buildAchievementStats(achievements),
+          _buildAchievementStats(achievements, screenSize),
 
-          const SizedBox(height: 24),
+          SizedBox(height: screenSize.height * 0.03),
 
           // Achievement List
           ...achievements.map(
-            (achievement) => _buildAchievementCard(achievement),
+            (achievement) => _buildAchievementCard(achievement, screenSize),
           ),
+
+          // Bottom padding
+          SizedBox(height: screenSize.height * 0.02),
         ],
       ),
     );
   }
 
-  Widget _buildAchievementStats(List<Achievement> achievements) {
+  Widget _buildAchievementStats(
+    List<Achievement> achievements,
+    Size screenSize,
+  ) {
     final unlockedCount = achievements.where((a) => a.isUnlocked).length;
     final totalCount = achievements.length;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(screenSize.width * 0.05),
         child: Column(
           children: [
             Text(
               'Achievements',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
             ),
-            const SizedBox(height: 16),
-            CircularProgressIndicator(
-              value: unlockedCount / totalCount,
-              strokeWidth: 8,
-              backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+            SizedBox(height: screenSize.height * 0.02),
+            SizedBox(
+              width: screenSize.width < 400 ? 80 : 100,
+              height: screenSize.width < 400 ? 80 : 100,
+              child: CircularProgressIndicator(
+                value: unlockedCount / totalCount,
+                strokeWidth: screenSize.width < 400 ? 6 : 8,
+                backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: screenSize.height * 0.02),
             Text(
               '$unlockedCount / $totalCount',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 20 : 24,
+              ),
             ),
             Text(
               'Achievements Unlocked',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize: screenSize.width < 400 ? 12 : 14,
+              ),
             ),
           ],
         ),
@@ -672,12 +818,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  Widget _buildAchievementCard(Achievement achievement) {
+  Widget _buildAchievementCard(Achievement achievement, Size screenSize) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: screenSize.height * 0.015),
       child: ListTile(
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: screenSize.width * 0.04,
+          vertical: screenSize.height * 0.01,
+        ),
         leading: Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(screenSize.width < 400 ? 6 : 8),
           decoration: BoxDecoration(
             color:
                 achievement.isUnlocked
@@ -691,6 +841,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 achievement.isUnlocked
                     ? achievement.color
                     : Theme.of(context).colorScheme.onSurfaceVariant,
+            size: screenSize.width < 400 ? 20 : 24,
           ),
         ),
         title: Text(
@@ -701,48 +852,60 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 achievement.isUnlocked
                     ? null
                     : Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: screenSize.width < 400 ? 14 : 16,
           ),
         ),
-        subtitle: Text(achievement.description),
-        trailing:
-            achievement.isUnlocked
-                ? Icon(Icons.check_circle, color: achievement.color)
-                : Icon(
-                  Icons.lock,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+        subtitle: Text(
+          achievement.description,
+          style: TextStyle(fontSize: screenSize.width < 400 ? 12 : 14),
+        ),
+        trailing: Icon(
+          achievement.isUnlocked ? Icons.check_circle : Icons.lock,
+          color:
+              achievement.isUnlocked
+                  ? achievement.color
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+          size: screenSize.width < 400 ? 20 : 24,
+        ),
       ),
     );
   }
 
-  Widget _buildProgressInsights(List<TrendData> trendsData) {
+  Widget _buildProgressInsights(List<TrendData> trendsData, Size screenSize) {
     final insights = _generateInsights(trendsData);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(screenSize.width * 0.05),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Insights & Recommendations',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: screenSize.height * 0.02),
             ...insights.map(
               (insight) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.only(bottom: screenSize.height * 0.015),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(insight.icon, color: insight.color, size: 20),
-                    const SizedBox(width: 12),
+                    Icon(
+                      insight.icon,
+                      color: insight.color,
+                      size: screenSize.width < 400 ? 18 : 20,
+                    ),
+                    SizedBox(width: screenSize.width * 0.03),
                     Expanded(
                       child: Text(
                         insight.text,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: screenSize.width < 400 ? 12 : 14,
+                        ),
                       ),
                     ),
                   ],
@@ -755,7 +918,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  // Helper methods for data processing
+  // Helper methods for data processing (same as before)
   List<TrendData> _getTrendsData(HabitDataProvider habitData) {
     final now = DateTime.now();
     final data = <TrendData>[];
@@ -986,7 +1149,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 }
 
-// Helper classes
+// Helper classes (same as before)
 class TrendData {
   final int dayIndex;
   final double percentage;

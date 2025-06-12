@@ -1,4 +1,4 @@
-// Weekly Screen Implementation
+// Weekly Screen Implementation - Fixed with Responsive Design
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +29,7 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
     final habitData = Provider.of<HabitDataProvider>(context);
     final weekEntries = habitData.getWeekEntries(_weekStart);
     final weeklyAverages = habitData.getWeeklyAverages(_weekStart);
+    final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
       appBar: AppBar(
@@ -45,29 +46,38 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Week Selector
-          _buildWeekSelector(),
+      body: SingleChildScrollView(
+        // Fixed: Made the entire body scrollable
+        child: Column(
+          children: [
+            // Week Selector
+            _buildWeekSelector(screenSize),
 
-          // Week Overview Card
-          _buildWeekOverviewCard(weekEntries),
+            // Week Overview Card
+            _buildWeekOverviewCard(weekEntries, screenSize),
 
-          // Daily Progress
-          _buildDailyProgress(weekEntries),
+            // Daily Progress
+            _buildDailyProgress(weekEntries, screenSize),
 
-          // Category Performance
-          Expanded(child: _buildCategoryPerformance(habitData, weeklyAverages)),
-        ],
+            // Category Performance - Now properly scrollable
+            _buildCategoryPerformance(habitData, weeklyAverages, screenSize),
+
+            // Add bottom padding to ensure content is not hidden behind system UI
+            SizedBox(height: screenSize.height * 0.02),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildWeekSelector() {
+  Widget _buildWeekSelector(Size screenSize) {
     return Card(
-      margin: const EdgeInsets.all(16),
+      margin: EdgeInsets.all(screenSize.width * 0.04),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: screenSize.width * 0.04,
+          vertical: screenSize.height * 0.015,
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -81,19 +91,24 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
                 });
               },
             ),
-            Column(
-              children: [
-                Text(
-                  '${DateFormat('MMM d').format(_weekStart)} - ${DateFormat('MMM d, yyyy').format(_weekEnd)}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    '${DateFormat('MMM d').format(_weekStart)} - ${DateFormat('MMM d, yyyy').format(_weekEnd)}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: screenSize.width < 400 ? 14 : 16,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                Text(
-                  'Week ${_getWeekNumber()}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+                  SizedBox(height: screenSize.height * 0.005),
+                  Text(
+                    'Week ${_getWeekNumber()}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.chevron_right),
@@ -109,7 +124,7 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
     );
   }
 
-  Widget _buildWeekOverviewCard(List<DailyEntry> weekEntries) {
+  Widget _buildWeekOverviewCard(List<DailyEntry> weekEntries, Size screenSize) {
     final weekAverage =
         weekEntries.isNotEmpty
             ? weekEntries.map((e) => e.percentage).reduce((a, b) => a + b) /
@@ -124,43 +139,59 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
     final daysCompleted = weekEntries.length;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: EdgeInsets.symmetric(
+        horizontal: screenSize.width * 0.04,
+        vertical: screenSize.height * 0.01,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(screenSize.width * 0.05),
         child: Column(
           children: [
             Text(
               'Week Performance',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                  'Average',
-                  '${weekAverage.toStringAsFixed(1)}%',
-                  Icons.trending_up,
-                  _getPerformanceColor(weekAverage),
-                ),
-                _buildStatItem(
-                  'Days Tracked',
-                  '$daysCompleted/7',
-                  Icons.calendar_today,
-                  daysCompleted >= 5 ? Colors.green : Colors.orange,
-                ),
-                if (bestDay != null)
-                  _buildStatItem(
-                    'Best Day',
-                    '${bestDay.percentage.toStringAsFixed(1)}%',
-                    Icons.star,
-                    Colors.amber,
+            SizedBox(height: screenSize.height * 0.025),
+
+            // Responsive layout for stats
+            screenSize.width > 600
+                ? Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: _buildStatItems(
+                    weekAverage,
+                    daysCompleted,
+                    bestDay,
+                    screenSize,
                   ),
-              ],
-            ),
-            const SizedBox(height: 16),
+                )
+                : Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children:
+                          _buildStatItems(
+                            weekAverage,
+                            daysCompleted,
+                            bestDay,
+                            screenSize,
+                          ).take(2).toList(),
+                    ),
+                    if (bestDay != null) ...[
+                      SizedBox(height: screenSize.height * 0.02),
+                      _buildStatItems(
+                        weekAverage,
+                        daysCompleted,
+                        bestDay,
+                        screenSize,
+                      )[2],
+                    ],
+                  ],
+                ),
+
+            SizedBox(height: screenSize.height * 0.02),
             LinearProgressIndicator(
               value: weekAverage / 100,
               backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
@@ -172,43 +203,92 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
     );
   }
 
+  List<Widget> _buildStatItems(
+    double weekAverage,
+    int daysCompleted,
+    DailyEntry? bestDay,
+    Size screenSize,
+  ) {
+    final items = [
+      _buildStatItem(
+        'Average',
+        '${weekAverage.toStringAsFixed(1)}%',
+        Icons.trending_up,
+        _getPerformanceColor(weekAverage),
+        screenSize,
+      ),
+      _buildStatItem(
+        'Days Tracked',
+        '$daysCompleted/7',
+        Icons.calendar_today,
+        daysCompleted >= 5 ? Colors.green : Colors.orange,
+        screenSize,
+      ),
+    ];
+
+    if (bestDay != null) {
+      items.add(
+        _buildStatItem(
+          'Best Day',
+          '${bestDay.percentage.toStringAsFixed(1)}%',
+          Icons.star,
+          Colors.amber,
+          screenSize,
+        ),
+      );
+    }
+
+    return items;
+  }
+
   Widget _buildStatItem(
     String label,
     String value,
     IconData icon,
     Color color,
+    Size screenSize,
   ) {
     return Column(
       children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 8),
+        Icon(icon, color: color, size: screenSize.width < 400 ? 24 : 28),
+        SizedBox(height: screenSize.height * 0.01),
         Text(
           value,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: color,
+            fontSize: screenSize.width < 400 ? 14 : 16,
           ),
         ),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontSize: screenSize.width < 400 ? 10 : 12,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildDailyProgress(List<DailyEntry> weekEntries) {
+  Widget _buildDailyProgress(List<DailyEntry> weekEntries, Size screenSize) {
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: EdgeInsets.symmetric(
+        horizontal: screenSize.width * 0.04,
+        vertical: screenSize.height * 0.01,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(screenSize.width * 0.04),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Daily Progress',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 16 : 18,
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: screenSize.height * 0.02),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: List.generate(7, (index) {
@@ -223,7 +303,7 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
                       ),
                 );
 
-                return _buildDayProgress(dayDate, dayEntry);
+                return _buildDayProgress(dayDate, dayEntry, screenSize);
               }),
             ),
           ],
@@ -232,133 +312,185 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
     );
   }
 
-  Widget _buildDayProgress(DateTime date, DailyEntry entry) {
+  Widget _buildDayProgress(DateTime date, DailyEntry entry, Size screenSize) {
     final isToday = _isSameDay(date, DateTime.now());
     final hasData = entry.itemGrades.isNotEmpty;
 
-    return Column(
-      children: [
-        Text(
-          DateFormat('E').format(date),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+    // Responsive circle size
+    final circleSize = screenSize.width < 400 ? 35.0 : 40.0;
+    final fontSize = screenSize.width < 400 ? 8.0 : 10.0;
+
+    return Flexible(
+      child: Column(
+        children: [
+          Text(
+            DateFormat('E').format(date),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+              fontSize: screenSize.width < 400 ? 10 : 12,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color:
-                hasData
-                    ? _getPerformanceColor(entry.percentage).withOpacity(0.2)
-                    : Theme.of(context).colorScheme.surfaceVariant,
-            border:
-                isToday
-                    ? Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2,
-                    )
-                    : null,
-          ),
-          child: Center(
-            child:
-                hasData
-                    ? Text(
-                      '${entry.percentage.toStringAsFixed(0)}%',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: _getPerformanceColor(entry.percentage),
+          SizedBox(height: screenSize.height * 0.01),
+          Container(
+            width: circleSize,
+            height: circleSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color:
+                  hasData
+                      ? _getPerformanceColor(entry.percentage).withOpacity(0.2)
+                      : Theme.of(context).colorScheme.surfaceVariant,
+              border:
+                  isToday
+                      ? Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 2,
+                      )
+                      : null,
+            ),
+            child: Center(
+              child:
+                  hasData
+                      ? Text(
+                        '${entry.percentage.toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.bold,
+                          color: _getPerformanceColor(entry.percentage),
+                        ),
+                      )
+                      : Icon(
+                        Icons.remove,
+                        size: fontSize + 6,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
-                    )
-                    : Icon(
-                      Icons.remove,
-                      size: 16,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text('${date.day}', style: Theme.of(context).textTheme.bodySmall),
-      ],
+          SizedBox(height: screenSize.height * 0.005),
+          Text(
+            '${date.day}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontSize: screenSize.width < 400 ? 10 : 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildCategoryPerformance(
     HabitDataProvider habitData,
     Map<String, double> weeklyAverages,
+    Size screenSize,
   ) {
     return Card(
-      margin: const EdgeInsets.all(16),
+      margin: EdgeInsets.all(screenSize.width * 0.04),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(screenSize.width * 0.04),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize:
+              MainAxisSize.min, // Important: Let content determine height
           children: [
             Text(
               'Category Performance',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 16 : 18,
+              ),
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: habitData.categories.length,
-                itemBuilder: (context, index) {
-                  final category = habitData.categories[index];
-                  final categoryAverage = _calculateCategoryAverage(
-                    category,
-                    weeklyAverages,
-                  );
+            SizedBox(height: screenSize.height * 0.02),
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ExpansionTile(
-                      leading: Icon(category.icon, color: category.color),
-                      title: Text(category.nameAr),
-                      subtitle: Text(
-                        '${categoryAverage.toStringAsFixed(1)}% average',
+            // Fixed: Use ListView with shrinkWrap instead of Expanded
+            ListView.builder(
+              shrinkWrap:
+                  true, // Important: Let ListView take only needed space
+              physics:
+                  const NeverScrollableScrollPhysics(), // Disable ListView scrolling
+              itemCount: habitData.categories.length,
+              itemBuilder: (context, index) {
+                final category = habitData.categories[index];
+                final categoryAverage = _calculateCategoryAverage(
+                  category,
+                  weeklyAverages,
+                );
+
+                return Card(
+                  margin: EdgeInsets.only(bottom: screenSize.height * 0.01),
+                  child: ExpansionTile(
+                    leading: Icon(
+                      category.icon,
+                      color: category.color,
+                      size: screenSize.width < 400 ? 20 : 24,
+                    ),
+                    title: Text(
+                      category.nameAr,
+                      style: TextStyle(
+                        fontSize: screenSize.width < 400 ? 14 : 16,
                       ),
-                      trailing: CircularProgressIndicator(
+                    ),
+                    subtitle: Text(
+                      '${categoryAverage.toStringAsFixed(1)}% average',
+                      style: TextStyle(
+                        fontSize: screenSize.width < 400 ? 12 : 14,
+                      ),
+                    ),
+                    trailing: SizedBox(
+                      width: screenSize.width < 400 ? 20 : 24,
+                      height: screenSize.width < 400 ? 20 : 24,
+                      child: CircularProgressIndicator(
                         value: categoryAverage / 10,
                         backgroundColor:
                             Theme.of(context).colorScheme.surfaceVariant,
                         color: category.color,
+                        strokeWidth: screenSize.width < 400 ? 2 : 3,
                       ),
-                      children:
-                          category.items.map((item) {
-                            final itemAverage = weeklyAverages[item.id] ?? 0.0;
-                            return ListTile(
-                              title: Text(item.nameAr),
-                              subtitle: Text(item.nameEn),
-                              trailing: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _getGradeColor(
-                                    itemAverage,
-                                  ).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '${itemAverage.toStringAsFixed(1)}',
-                                  style: TextStyle(
-                                    color: _getGradeColor(itemAverage),
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                    ),
+                    children:
+                        category.items.map((item) {
+                          final itemAverage = weeklyAverages[item.id] ?? 0.0;
+                          return ListTile(
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: screenSize.width * 0.04,
+                              vertical: screenSize.height * 0.005,
+                            ),
+                            title: Text(
+                              item.nameAr,
+                              style: TextStyle(
+                                fontSize: screenSize.width < 400 ? 13 : 15,
+                              ),
+                            ),
+                            subtitle: Text(
+                              item.nameEn,
+                              style: TextStyle(
+                                fontSize: screenSize.width < 400 ? 11 : 13,
+                              ),
+                            ),
+                            trailing: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: screenSize.width * 0.02,
+                                vertical: screenSize.height * 0.005,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getGradeColor(
+                                  itemAverage,
+                                ).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${itemAverage.toStringAsFixed(1)}',
+                                style: TextStyle(
+                                  color: _getGradeColor(itemAverage),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: screenSize.width < 400 ? 12 : 14,
                                 ),
                               ),
-                            );
-                          }).toList(),
-                    ),
-                  );
-                },
-              ),
+                            ),
+                          );
+                        }).toList(),
+                  ),
+                );
+              },
             ),
           ],
         ),

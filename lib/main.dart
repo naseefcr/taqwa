@@ -242,6 +242,7 @@ class _TodayScreenState extends State<TodayScreen> {
     final habitData = Provider.of<HabitDataProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final hijriDate = HijriCalendar.fromDate(_selectedDate);
+    final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
       appBar: AppBar(
@@ -348,10 +349,14 @@ class _TodayScreenState extends State<TodayScreen> {
         children: [
           // Daily Progress Card
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: EdgeInsets.all(
+              screenSize.width * 0.04,
+            ), // Responsive margin
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(
+                  screenSize.width * 0.04,
+                ), // Responsive padding
                 child: Row(
                   children: [
                     Expanded(
@@ -362,7 +367,7 @@ class _TodayScreenState extends State<TodayScreen> {
                             'Today\'s Progress',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: screenSize.height * 0.01),
                           LinearProgressIndicator(
                             value:
                                 habitData.calculateDayPercentage(_todayGrades) /
@@ -373,7 +378,7 @@ class _TodayScreenState extends State<TodayScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    SizedBox(width: screenSize.width * 0.04),
                     Column(
                       children: [
                         Text(
@@ -398,7 +403,7 @@ class _TodayScreenState extends State<TodayScreen> {
           ),
 
           // Entry Method Views
-          Expanded(child: _buildEntryView(habitData)),
+          Expanded(child: _buildEntryView(habitData, screenSize)),
         ],
       ),
       floatingActionButton:
@@ -426,61 +431,82 @@ class _TodayScreenState extends State<TodayScreen> {
         .reduce((a, b) => a + b);
   }
 
-  Widget _buildEntryView(HabitDataProvider habitData) {
+  Widget _buildEntryView(HabitDataProvider habitData, Size screenSize) {
     switch (habitData.currentEntryMethod) {
       case 'grid':
-        return _buildGridView(habitData);
+        return _buildGridView(habitData, screenSize);
       case 'list':
-        return _buildListView(habitData);
+        return _buildListView(habitData, screenSize);
       case 'card':
-        return _buildCardView(habitData);
+        return _buildCardView(habitData, screenSize);
       case 'swipe':
-        return _buildSwipeView(habitData);
+        return _buildSwipeView(habitData, screenSize);
       default:
-        return _buildGridView(habitData);
+        return _buildGridView(habitData, screenSize);
     }
   }
 
-  Widget _buildGridView(HabitDataProvider habitData) {
+  Widget _buildGridView(HabitDataProvider habitData, Size screenSize) {
+    // Calculate responsive values
+    final horizontalPadding = screenSize.width * 0.04; // 4% of screen width
+    final verticalPadding = screenSize.height * 0.02; // 2% of screen height
+    final cardMargin = screenSize.height * 0.02;
+    final cardPadding = screenSize.width * 0.04;
+
+    // Dynamic cross axis count based on screen width
+    int crossAxisCount =
+        screenSize.width > 600 ? 3 : 2; // 3 columns for tablets, 2 for phones
+
+    // Dynamic aspect ratio based on screen size
+    double childAspectRatio =
+        screenSize.width > 600 ? 2.5 : 2.2; // Wider cards for larger screens
+
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding,
+        vertical: verticalPadding,
+      ),
       itemCount: habitData.categories.length,
       itemBuilder: (context, index) {
         final category = habitData.categories[index];
         return Card(
-          margin: const EdgeInsets.only(bottom: 16),
+          margin: EdgeInsets.only(bottom: cardMargin),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(cardPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Icon(category.icon, color: category.color),
-                    const SizedBox(width: 8),
-                    Text(
-                      category.nameAr,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    SizedBox(width: screenSize.width * 0.02),
+                    Expanded(
+                      child: Text(
+                        category.nameAr,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Text(' • ${category.nameEn}'),
+                    if (screenSize.width >
+                        350) // Only show English name on larger screens
+                      Text(' • ${category.nameEn}'),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: screenSize.height * 0.02),
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 3,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: childAspectRatio,
+                    crossAxisSpacing: screenSize.width * 0.02,
+                    mainAxisSpacing: screenSize.height * 0.01,
                   ),
                   itemCount: category.items.length,
                   itemBuilder: (context, itemIndex) {
                     final item = category.items[itemIndex];
-                    return _buildHabitItemCard(item);
+                    return _buildHabitItemCard(item, screenSize);
                   },
                 ),
               ],
@@ -491,11 +517,11 @@ class _TodayScreenState extends State<TodayScreen> {
     );
   }
 
-  Widget _buildListView(HabitDataProvider habitData) {
+  Widget _buildListView(HabitDataProvider habitData, Size screenSize) {
     final allItems = habitData.categories.expand((cat) => cat.items).toList();
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(screenSize.width * 0.04),
       itemCount: allItems.length,
       itemBuilder: (context, index) {
         final item = allItems[index];
@@ -504,8 +530,12 @@ class _TodayScreenState extends State<TodayScreen> {
         );
 
         return Card(
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: EdgeInsets.only(bottom: screenSize.height * 0.01),
           child: ListTile(
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: screenSize.width * 0.04,
+              vertical: screenSize.height * 0.01,
+            ),
             leading: CircleAvatar(
               backgroundColor: category.color.withOpacity(0.1),
               child: Icon(category.icon, color: category.color, size: 20),
@@ -519,32 +549,37 @@ class _TodayScreenState extends State<TodayScreen> {
     );
   }
 
-  Widget _buildCardView(HabitDataProvider habitData) {
+  Widget _buildCardView(HabitDataProvider habitData, Size screenSize) {
     return PageView.builder(
       itemCount: habitData.categories.length,
       itemBuilder: (context, index) {
         final category = habitData.categories[index];
         return Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(screenSize.width * 0.04),
           child: Card(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(screenSize.width * 0.06),
               child: Column(
                 children: [
                   Icon(category.icon, size: 48, color: category.color),
-                  const SizedBox(height: 16),
+                  SizedBox(height: screenSize.height * 0.02),
                   Text(
                     category.nameAr,
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   Text(category.nameEn),
-                  const SizedBox(height: 24),
+                  SizedBox(height: screenSize.height * 0.03),
                   Expanded(
                     child: ListView.builder(
                       itemCount: category.items.length,
                       itemBuilder: (context, itemIndex) {
                         final item = category.items[itemIndex];
-                        return _buildHabitItemCard(item);
+                        return Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: screenSize.height * 0.005,
+                          ),
+                          child: _buildHabitItemCard(item, screenSize),
+                        );
                       },
                     ),
                   ),
@@ -557,7 +592,7 @@ class _TodayScreenState extends State<TodayScreen> {
     );
   }
 
-  Widget _buildSwipeView(HabitDataProvider habitData) {
+  Widget _buildSwipeView(HabitDataProvider habitData, Size screenSize) {
     final allItems = habitData.categories.expand((cat) => cat.items).toList();
 
     return PageView.builder(
@@ -569,21 +604,21 @@ class _TodayScreenState extends State<TodayScreen> {
         );
 
         return Padding(
-          padding: const EdgeInsets.all(32),
+          padding: EdgeInsets.all(screenSize.width * 0.08),
           child: Card(
             child: Padding(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.all(screenSize.width * 0.08),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(category.icon, size: 64, color: category.color),
-                  const SizedBox(height: 24),
+                  SizedBox(height: screenSize.height * 0.03),
                   Text(
                     item.nameAr,
                     style: Theme.of(context).textTheme.headlineMedium,
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: screenSize.height * 0.01),
                   Text(
                     item.nameEn,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -591,15 +626,15 @@ class _TodayScreenState extends State<TodayScreen> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: screenSize.height * 0.04),
                   Text(
                     'Select Grade',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: screenSize.height * 0.02),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: screenSize.width * 0.02,
+                    runSpacing: screenSize.height * 0.01,
                     children:
                         Grade.allGrades.map((grade) {
                           final isSelected =
@@ -621,7 +656,7 @@ class _TodayScreenState extends State<TodayScreen> {
                           );
                         }).toList(),
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: screenSize.height * 0.03),
                   Text(
                     '${index + 1} of ${allItems.length}',
                     style: Theme.of(context).textTheme.bodySmall,
@@ -635,7 +670,7 @@ class _TodayScreenState extends State<TodayScreen> {
     );
   }
 
-  Widget _buildHabitItemCard(HabitItem item) {
+  Widget _buildHabitItemCard(HabitItem item, Size screenSize) {
     final currentGrade = _todayGrades[item.id];
 
     return Card(
@@ -651,33 +686,46 @@ class _TodayScreenState extends State<TodayScreen> {
         onTap: () => _showGradeDialog(item),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(screenSize.width * 0.03),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                item.nameAr,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              Flexible(
+                child: Text(
+                  item.nameAr,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize:
+                        screenSize.width < 400
+                            ? 12
+                            : 14, // Responsive font size
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2, // Allow 2 lines for longer text
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                item.nameEn,
-                style: Theme.of(context).textTheme.bodySmall,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              SizedBox(height: screenSize.height * 0.005),
+              Flexible(
+                child: Text(
+                  item.nameEn,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize:
+                        screenSize.width < 400
+                            ? 10
+                            : 12, // Responsive font size
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2, // Allow 2 lines for longer text
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (currentGrade != null) ...[
-                const SizedBox(height: 8),
+                SizedBox(height: screenSize.height * 0.01),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: screenSize.width * 0.02,
+                    vertical: screenSize.height * 0.005,
                   ),
                   decoration: BoxDecoration(
                     color:
@@ -688,10 +736,10 @@ class _TodayScreenState extends State<TodayScreen> {
                   ),
                   child: Text(
                     currentGrade,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      fontSize: screenSize.width < 400 ? 10 : 12,
                     ),
                   ),
                 ),
@@ -743,6 +791,8 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   void _showGradeDialog(HabitItem item) {
+    final screenSize = MediaQuery.of(context).size;
+
     showDialog(
       context: context,
       builder:
@@ -757,8 +807,8 @@ class _TodayScreenState extends State<TodayScreen> {
               ],
             ),
             content: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: screenSize.width * 0.02,
+              runSpacing: screenSize.height * 0.01,
               children:
                   Grade.allGrades.map((grade) {
                     return FilterChip(
