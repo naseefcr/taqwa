@@ -1,10 +1,11 @@
-// Weekly Screen Implementation - Fixed with Responsive Design
+// Enhanced Weekly Screen with navigation to daily view
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../providers/habit_data_provider.dart';
+import '../screens/daily_screen.dart'; // Import the new DailyScreen
 
 class WeeklyScreen extends StatefulWidget {
   const WeeklyScreen({super.key});
@@ -44,10 +45,22 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
               });
             },
           ),
+          // Add quick action to go to today's daily view
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: 'Edit Today',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DailyScreen(initialDate: DateTime.now()),
+                ),
+              );
+            },
+          ),
         ],
       ),
       body: SingleChildScrollView(
-        // Fixed: Made the entire body scrollable
         child: Column(
           children: [
             // Week Selector
@@ -56,13 +69,12 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
             // Week Overview Card
             _buildWeekOverviewCard(weekEntries, screenSize),
 
-            // Daily Progress
+            // Enhanced Daily Progress with tap navigation
             _buildDailyProgress(weekEntries, screenSize),
 
-            // Category Performance - Now properly scrollable
+            // Category Performance
             _buildCategoryPerformance(habitData, weeklyAverages, screenSize),
 
-            // Add bottom padding to ensure content is not hidden behind system UI
             SizedBox(height: screenSize.height * 0.02),
           ],
         ),
@@ -234,6 +246,7 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
           Icons.star,
           Colors.amber,
           screenSize,
+          onTap: () => _navigateToDailyView(bestDay.date),
         ),
       );
     }
@@ -246,9 +259,10 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
     String value,
     IconData icon,
     Color color,
-    Size screenSize,
-  ) {
-    return Column(
+    Size screenSize, {
+    VoidCallback? onTap,
+  }) {
+    final widget = Column(
       children: [
         Icon(icon, color: color, size: screenSize.width < 400 ? 24 : 28),
         SizedBox(height: screenSize.height * 0.01),
@@ -268,8 +282,19 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
         ),
       ],
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(padding: const EdgeInsets.all(8), child: widget),
+      );
+    }
+
+    return widget;
   }
 
+  // Enhanced Daily Progress with tap navigation
   Widget _buildDailyProgress(List<DailyEntry> weekEntries, Size screenSize) {
     return Card(
       margin: EdgeInsets.symmetric(
@@ -281,12 +306,24 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Daily Progress',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: screenSize.width < 400 ? 16 : 18,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Daily Progress',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: screenSize.width < 400 ? 16 : 18,
+                  ),
+                ),
+                Text(
+                  'Tap to view/edit',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: screenSize.width < 400 ? 10 : 12,
+                  ),
+                ),
+              ],
             ),
             SizedBox(height: screenSize.height * 0.02),
             Row(
@@ -314,6 +351,7 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
 
   Widget _buildDayProgress(DateTime date, DailyEntry entry, Size screenSize) {
     final isToday = _isSameDay(date, DateTime.now());
+    final isFuture = date.isAfter(DateTime.now());
     final hasData = entry.itemGrades.isNotEmpty;
 
     // Responsive circle size
@@ -321,60 +359,87 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
     final fontSize = screenSize.width < 400 ? 8.0 : 10.0;
 
     return Flexible(
-      child: Column(
-        children: [
-          Text(
-            DateFormat('E').format(date),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-              fontSize: screenSize.width < 400 ? 10 : 12,
-            ),
+      child: InkWell(
+        onTap: isFuture ? null : () => _navigateToDailyView(date),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Column(
+            children: [
+              Text(
+                DateFormat('E').format(date),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                  fontSize: screenSize.width < 400 ? 10 : 12,
+                  color: isFuture ? Colors.grey : null,
+                ),
+              ),
+              SizedBox(height: screenSize.height * 0.01),
+              Container(
+                width: circleSize,
+                height: circleSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color:
+                      isFuture
+                          ? Colors.grey.withOpacity(0.1)
+                          : hasData
+                          ? _getPerformanceColor(
+                            entry.percentage,
+                          ).withOpacity(0.2)
+                          : Theme.of(context).colorScheme.surfaceVariant,
+                  border:
+                      isToday
+                          ? Border.all(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          )
+                          : null,
+                ),
+                child: Center(
+                  child:
+                      isFuture
+                          ? Icon(
+                            Icons.schedule,
+                            size: fontSize + 6,
+                            color: Colors.grey,
+                          )
+                          : hasData
+                          ? Text(
+                            '${entry.percentage.toStringAsFixed(0)}%',
+                            style: TextStyle(
+                              fontSize: fontSize,
+                              fontWeight: FontWeight.bold,
+                              color: _getPerformanceColor(entry.percentage),
+                            ),
+                          )
+                          : Icon(
+                            Icons.add,
+                            size: fontSize + 6,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                ),
+              ),
+              SizedBox(height: screenSize.height * 0.005),
+              Text(
+                '${date.day}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: screenSize.width < 400 ? 10 : 12,
+                  color: isFuture ? Colors.grey : null,
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: screenSize.height * 0.01),
-          Container(
-            width: circleSize,
-            height: circleSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color:
-                  hasData
-                      ? _getPerformanceColor(entry.percentage).withOpacity(0.2)
-                      : Theme.of(context).colorScheme.surfaceVariant,
-              border:
-                  isToday
-                      ? Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 2,
-                      )
-                      : null,
-            ),
-            child: Center(
-              child:
-                  hasData
-                      ? Text(
-                        '${entry.percentage.toStringAsFixed(0)}%',
-                        style: TextStyle(
-                          fontSize: fontSize,
-                          fontWeight: FontWeight.bold,
-                          color: _getPerformanceColor(entry.percentage),
-                        ),
-                      )
-                      : Icon(
-                        Icons.remove,
-                        size: fontSize + 6,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-            ),
-          ),
-          SizedBox(height: screenSize.height * 0.005),
-          Text(
-            '${date.day}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: screenSize.width < 400 ? 10 : 12,
-            ),
-          ),
-        ],
+        ),
       ),
+    );
+  }
+
+  // Navigation helper
+  void _navigateToDailyView(DateTime date) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DailyScreen(initialDate: date)),
     );
   }
 
@@ -389,8 +454,7 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
         padding: EdgeInsets.all(screenSize.width * 0.04),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize:
-              MainAxisSize.min, // Important: Let content determine height
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Category Performance',
@@ -401,12 +465,9 @@ class _WeeklyScreenState extends State<WeeklyScreen> {
             ),
             SizedBox(height: screenSize.height * 0.02),
 
-            // Fixed: Use ListView with shrinkWrap instead of Expanded
             ListView.builder(
-              shrinkWrap:
-                  true, // Important: Let ListView take only needed space
-              physics:
-                  const NeverScrollableScrollPhysics(), // Disable ListView scrolling
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: habitData.categories.length,
               itemBuilder: (context, index) {
                 final category = habitData.categories[index];

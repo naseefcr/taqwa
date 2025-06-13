@@ -1,4 +1,4 @@
-// Responsive Analytics Screen Implementation
+// Enhanced Analytics Screen with daily navigation
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../providers/habit_data_provider.dart';
+import '../screens/daily_screen.dart'; // Add this import
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -126,6 +127,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   ),
                 ],
           ),
+          // Add quick access to daily view
+          IconButton(
+            icon: const Icon(Icons.edit_calendar),
+            tooltip: 'View/Edit Day',
+            onPressed: () => _showDatePicker(),
+          ),
         ],
       ),
       body: TabBarView(
@@ -139,6 +146,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
+  // Add date picker for quick daily navigation
+  Future<void> _showDatePicker() async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      helpText: 'Select Date to View/Edit',
+    );
+
+    if (pickedDate != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DailyScreen(initialDate: pickedDate)),
+      );
+    }
+  }
+
   Widget _buildTrendsTab(HabitDataProvider habitData, Size screenSize) {
     final trendsData = _getTrendsData(habitData);
 
@@ -147,7 +172,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Overall Progress Chart
+          // Overall Progress Chart (with tap functionality)
           _buildOverallProgressChart(trendsData, screenSize),
 
           SizedBox(height: screenSize.height * 0.03),
@@ -165,9 +190,134 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           // Progress Insights
           _buildProgressInsights(trendsData, screenSize),
 
-          // Bottom padding
+          // Recent Days Quick Access
+          _buildRecentDaysAccess(habitData, screenSize),
+
           SizedBox(height: screenSize.height * 0.02),
         ],
+      ),
+    );
+  }
+
+  // Add a quick access widget for recent days
+  Widget _buildRecentDaysAccess(HabitDataProvider habitData, Size screenSize) {
+    final recentDays = List.generate(7, (index) {
+      return DateTime.now().subtract(Duration(days: index));
+    });
+
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(screenSize.width * 0.05),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quick Day Access',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
+            ),
+            SizedBox(height: screenSize.height * 0.02),
+            Text(
+              'Tap to view/edit any recent day',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SizedBox(height: screenSize.height * 0.02),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  recentDays.map((date) {
+                    final entry = habitData.entries.firstWhere(
+                      (e) => _isSameDay(e.date, date),
+                      orElse:
+                          () => DailyEntry(
+                            date: date,
+                            itemGrades: {},
+                            percentage: 0,
+                          ),
+                    );
+
+                    final isToday = _isSameDay(date, DateTime.now());
+                    final hasData = entry.itemGrades.isNotEmpty;
+
+                    return InkWell(
+                      onTap:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DailyScreen(initialDate: date),
+                            ),
+                          ),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              isToday
+                                  ? Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withOpacity(0.1)
+                                  : hasData
+                                  ? Colors.green.withOpacity(0.1)
+                                  : Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceVariant,
+                          borderRadius: BorderRadius.circular(8),
+                          border:
+                              isToday
+                                  ? Border.all(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  )
+                                  : null,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              isToday ? 'Today' : DateFormat('E').format(date),
+                              style: TextStyle(
+                                fontWeight:
+                                    isToday
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              DateFormat('M/d').format(date),
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            if (hasData)
+                              Text(
+                                '${entry.percentage.toStringAsFixed(0)}%',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            else
+                              Icon(
+                                Icons.add,
+                                size: 12,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -176,7 +326,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     List<TrendData> trendsData,
     Size screenSize,
   ) {
-    // Responsive chart height
     final chartHeight = screenSize.height < 600 ? 200.0 : 250.0;
 
     return Card(
@@ -205,7 +354,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 ),
               ],
             ),
-            SizedBox(height: screenSize.height * 0.03),
+            SizedBox(height: screenSize.height * 0.01),
+            Text(
+              'Tap any point to view that day',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontSize: screenSize.width < 400 ? 10 : 12,
+              ),
+            ),
+            SizedBox(height: screenSize.height * 0.02),
             SizedBox(
               height: chartHeight,
               child: LineChart(
@@ -275,6 +432,41 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   maxX: _selectedTimeRange.toDouble(),
                   minY: 0,
                   maxY: 100,
+                  lineTouchData: LineTouchData(
+                    touchCallback: (
+                      FlTouchEvent event,
+                      LineTouchResponse? touchResponse,
+                    ) {
+                      if (event is FlTapUpEvent &&
+                          touchResponse?.lineBarSpots != null) {
+                        final spot = touchResponse!.lineBarSpots!.first;
+                        final trendData = trendsData[spot.x.toInt()];
+                        // Navigate to the tapped day
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) => DailyScreen(initialDate: trendData.date),
+                          ),
+                        );
+                      }
+                    },
+                    touchTooltipData: LineTouchTooltipData(
+                      tooltipBgColor: Theme.of(context).colorScheme.surface,
+                      getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+                        return touchedBarSpots.map((barSpot) {
+                          final trendData = trendsData[barSpot.x.toInt()];
+                          return LineTooltipItem(
+                            '${DateFormat('MMM d').format(trendData.date)}\n${barSpot.y.toStringAsFixed(1)}%\nTap to view',
+                            TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: 12,
+                            ),
+                          );
+                        }).toList();
+                      },
+                    ),
+                  ),
                   lineBarsData: [
                     LineChartBarData(
                       spots:
@@ -297,7 +489,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       ),
                       barWidth: screenSize.width < 400 ? 2 : 3,
                       isStrokeCapRound: true,
-                      dotData: FlDotData(show: false),
+                      dotData: FlDotData(show: true),
                       belowBarData: BarAreaData(
                         show: true,
                         gradient: LinearGradient(
@@ -324,6 +516,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
+  // Keep all other existing methods unchanged...
   Widget _buildStreaksCard(HabitDataProvider habitData, Size screenSize) {
     final streaks = _calculateStreaks(habitData);
 
@@ -342,7 +535,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ),
             SizedBox(height: screenSize.height * 0.02),
 
-            // Responsive layout for streaks
             screenSize.width > 600
                 ? Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -445,6 +637,68 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         ),
       ],
     );
+  }
+
+  // Keep all other existing methods (buildConsistencyChart, buildCategoriesTab, etc.)
+  // ... (include all the rest of your existing analytics code here)
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  // Helper methods for data processing (include all existing helper methods)
+  List<TrendData> _getTrendsData(HabitDataProvider habitData) {
+    final now = DateTime.now();
+    final data = <TrendData>[];
+
+    for (int i = 0; i < _selectedTimeRange; i++) {
+      final date = now.subtract(Duration(days: _selectedTimeRange - 1 - i));
+      final entry = habitData.entries.firstWhere(
+        (e) => _isSameDay(e.date, date),
+        orElse: () => DailyEntry(date: date, itemGrades: {}, percentage: 0),
+      );
+      data.add(
+        TrendData(dayIndex: i, percentage: entry.percentage, date: date),
+      );
+    }
+
+    return data;
+  }
+
+  Map<String, int> _calculateStreaks(HabitDataProvider habitData) {
+    final entries =
+        habitData.entries.toList()..sort((a, b) => a.date.compareTo(b.date));
+
+    int currentStreak = 0;
+    int bestStreak = 0;
+    int tempStreak = 0;
+
+    DateTime? lastDate;
+
+    for (final entry in entries) {
+      if (entry.percentage >= 70) {
+        if (lastDate == null || entry.date.difference(lastDate).inDays == 1) {
+          tempStreak++;
+        } else {
+          tempStreak = 1;
+        }
+        bestStreak = tempStreak > bestStreak ? tempStreak : bestStreak;
+
+        if (_isSameDay(entry.date, DateTime.now()) ||
+            entry.date.difference(DateTime.now()).inDays == -1) {
+          currentStreak = tempStreak;
+        }
+      } else {
+        tempStreak = 0;
+      }
+      lastDate = entry.date;
+    }
+
+    return {
+      'currentStreak': currentStreak,
+      'bestStreak': bestStreak,
+      'totalDays': entries.length,
+    };
   }
 
   Widget _buildConsistencyChart(List<TrendData> trendsData, Size screenSize) {
@@ -598,6 +852,140 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
+  Widget _buildAchievementsTab(HabitDataProvider habitData, Size screenSize) {
+    final achievements = _getAchievements(habitData);
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(screenSize.width * 0.04),
+      child: Column(
+        children: [
+          // Achievement Stats
+          _buildAchievementStats(achievements, screenSize),
+
+          SizedBox(height: screenSize.height * 0.03),
+
+          // Achievement List
+          ...achievements.map(
+            (achievement) => _buildAchievementCard(achievement, screenSize),
+          ),
+
+          // Bottom padding
+          SizedBox(height: screenSize.height * 0.02),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressInsights(List<TrendData> trendsData, Size screenSize) {
+    final insights = _generateInsights(trendsData);
+
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(screenSize.width * 0.05),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Insights & Recommendations',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: screenSize.width < 400 ? 18 : 22,
+              ),
+            ),
+            SizedBox(height: screenSize.height * 0.02),
+            ...insights.map(
+              (insight) => Padding(
+                padding: EdgeInsets.only(bottom: screenSize.height * 0.015),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      insight.icon,
+                      color: insight.color,
+                      size: screenSize.width < 400 ? 18 : 20,
+                    ),
+                    SizedBox(width: screenSize.width * 0.03),
+                    Expanded(
+                      child: Text(
+                        insight.text,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: screenSize.width < 400 ? 12 : 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<double> _getConsistencyData(List<TrendData> trendsData) {
+    final weekdayData = List.generate(7, (index) => <double>[]);
+
+    for (final data in trendsData) {
+      final weekday = data.date.weekday - 1; // Monday = 0
+      weekdayData[weekday].add(data.percentage);
+    }
+
+    return weekdayData.map((dayData) {
+      if (dayData.isEmpty) return 0.0;
+      return dayData.reduce((a, b) => a + b) / dayData.length;
+    }).toList();
+  }
+
+  Map<HabitCategory, double> _getCategoryPerformanceData(
+    HabitDataProvider habitData,
+  ) {
+    final now = DateTime.now();
+    final recentEntries =
+        habitData.entries.where((entry) {
+          return entry.date.isAfter(
+            now.subtract(Duration(days: _selectedTimeRange)),
+          );
+        }).toList();
+
+    final categoryData = <HabitCategory, double>{};
+
+    for (final category in habitData.categories) {
+      final categoryValues = <double>[];
+
+      for (final entry in recentEntries) {
+        final categoryItemValues = <int>[];
+
+        for (final item in category.items) {
+          final gradeSymbol = entry.itemGrades[item.id];
+          if (gradeSymbol != null) {
+            final grade = Grade.allGrades.firstWhere(
+              (g) => g.symbol == gradeSymbol,
+              orElse: () => Grade.allGrades.last,
+            );
+            categoryItemValues.add(grade.value);
+          }
+        }
+
+        if (categoryItemValues.isNotEmpty) {
+          final average =
+              categoryItemValues.reduce((a, b) => a + b) /
+              categoryItemValues.length;
+          categoryValues.add((average / 10) * 100);
+        }
+      }
+
+      if (categoryValues.isNotEmpty) {
+        categoryData[category] =
+            categoryValues.reduce((a, b) => a + b) / categoryValues.length;
+      } else {
+        categoryData[category] = 0.0;
+      }
+    }
+
+    return categoryData;
+  }
+
   Widget _buildCategoryPieChart(
     Map<HabitCategory, double> categoryData,
     Size screenSize,
@@ -745,30 +1133,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  Widget _buildAchievementsTab(HabitDataProvider habitData, Size screenSize) {
-    final achievements = _getAchievements(habitData);
-
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(screenSize.width * 0.04),
-      child: Column(
-        children: [
-          // Achievement Stats
-          _buildAchievementStats(achievements, screenSize),
-
-          SizedBox(height: screenSize.height * 0.03),
-
-          // Achievement List
-          ...achievements.map(
-            (achievement) => _buildAchievementCard(achievement, screenSize),
-          ),
-
-          // Bottom padding
-          SizedBox(height: screenSize.height * 0.02),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAchievementStats(
     List<Achievement> achievements,
     Size screenSize,
@@ -869,173 +1233,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         ),
       ),
     );
-  }
-
-  Widget _buildProgressInsights(List<TrendData> trendsData, Size screenSize) {
-    final insights = _generateInsights(trendsData);
-
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(screenSize.width * 0.05),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Insights & Recommendations',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: screenSize.width < 400 ? 18 : 22,
-              ),
-            ),
-            SizedBox(height: screenSize.height * 0.02),
-            ...insights.map(
-              (insight) => Padding(
-                padding: EdgeInsets.only(bottom: screenSize.height * 0.015),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      insight.icon,
-                      color: insight.color,
-                      size: screenSize.width < 400 ? 18 : 20,
-                    ),
-                    SizedBox(width: screenSize.width * 0.03),
-                    Expanded(
-                      child: Text(
-                        insight.text,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontSize: screenSize.width < 400 ? 12 : 14,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Helper methods for data processing (same as before)
-  List<TrendData> _getTrendsData(HabitDataProvider habitData) {
-    final now = DateTime.now();
-    final data = <TrendData>[];
-
-    for (int i = 0; i < _selectedTimeRange; i++) {
-      final date = now.subtract(Duration(days: _selectedTimeRange - 1 - i));
-      final entry = habitData.entries.firstWhere(
-        (e) => _isSameDay(e.date, date),
-        orElse: () => DailyEntry(date: date, itemGrades: {}, percentage: 0),
-      );
-      data.add(
-        TrendData(dayIndex: i, percentage: entry.percentage, date: date),
-      );
-    }
-
-    return data;
-  }
-
-  List<double> _getConsistencyData(List<TrendData> trendsData) {
-    final weekdayData = List.generate(7, (index) => <double>[]);
-
-    for (final data in trendsData) {
-      final weekday = data.date.weekday - 1; // Monday = 0
-      weekdayData[weekday].add(data.percentage);
-    }
-
-    return weekdayData.map((dayData) {
-      if (dayData.isEmpty) return 0.0;
-      return dayData.reduce((a, b) => a + b) / dayData.length;
-    }).toList();
-  }
-
-  Map<String, int> _calculateStreaks(HabitDataProvider habitData) {
-    final entries =
-        habitData.entries.toList()..sort((a, b) => a.date.compareTo(b.date));
-
-    int currentStreak = 0;
-    int bestStreak = 0;
-    int tempStreak = 0;
-
-    DateTime? lastDate;
-
-    for (final entry in entries) {
-      if (entry.percentage >= 70) {
-        // Consider 70%+ as a good day
-        if (lastDate == null || entry.date.difference(lastDate).inDays == 1) {
-          tempStreak++;
-        } else {
-          tempStreak = 1;
-        }
-        bestStreak = tempStreak > bestStreak ? tempStreak : bestStreak;
-
-        // Check if this continues to today
-        if (_isSameDay(entry.date, DateTime.now()) ||
-            entry.date.difference(DateTime.now()).inDays == -1) {
-          currentStreak = tempStreak;
-        }
-      } else {
-        tempStreak = 0;
-      }
-      lastDate = entry.date;
-    }
-
-    return {
-      'currentStreak': currentStreak,
-      'bestStreak': bestStreak,
-      'totalDays': entries.length,
-    };
-  }
-
-  Map<HabitCategory, double> _getCategoryPerformanceData(
-    HabitDataProvider habitData,
-  ) {
-    final now = DateTime.now();
-    final recentEntries =
-        habitData.entries.where((entry) {
-          return entry.date.isAfter(
-            now.subtract(Duration(days: _selectedTimeRange)),
-          );
-        }).toList();
-
-    final categoryData = <HabitCategory, double>{};
-
-    for (final category in habitData.categories) {
-      final categoryValues = <double>[];
-
-      for (final entry in recentEntries) {
-        final categoryItemValues = <int>[];
-
-        for (final item in category.items) {
-          final gradeSymbol = entry.itemGrades[item.id];
-          if (gradeSymbol != null) {
-            final grade = Grade.allGrades.firstWhere(
-              (g) => g.symbol == gradeSymbol,
-              orElse: () => Grade.allGrades.last,
-            );
-            categoryItemValues.add(grade.value);
-          }
-        }
-
-        if (categoryItemValues.isNotEmpty) {
-          final average =
-              categoryItemValues.reduce((a, b) => a + b) /
-              categoryItemValues.length;
-          categoryValues.add((average / 10) * 100);
-        }
-      }
-
-      if (categoryValues.isNotEmpty) {
-        categoryData[category] =
-            categoryValues.reduce((a, b) => a + b) / categoryValues.length;
-      } else {
-        categoryData[category] = 0.0;
-      }
-    }
-
-    return categoryData;
   }
 
   List<Achievement> _getAchievements(HabitDataProvider habitData) {
@@ -1143,13 +1340,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
     return insights;
   }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
 }
 
-// Helper classes (same as before)
+// Helper classes
 class TrendData {
   final int dayIndex;
   final double percentage;
