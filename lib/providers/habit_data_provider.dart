@@ -3,11 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models.dart';
+import '../services/firestore_sync_service.dart';
 
 class HabitDataProvider extends ChangeNotifier {
   List<HabitCategory> _categories = [];
   List<DailyEntry> _entries = [];
   String _currentEntryMethod = 'grid'; // 'grid', 'list', 'card', 'swipe'
+
+  // Firebase sync service
+  FirestoreSyncService? _syncService;
+  bool _isOnline = false;
+  String? _lastSyncError;
 
   // Hive boxes
   Box<Map>? _entriesBox;
@@ -16,6 +22,28 @@ class HabitDataProvider extends ChangeNotifier {
   List<HabitCategory> get categories => _categories;
   List<DailyEntry> get entries => _entries;
   String get currentEntryMethod => _currentEntryMethod;
+  bool get isOnline => _isOnline;
+  String? get lastSyncError => _lastSyncError;
+  bool get isSyncing => _syncService?.isSyncing ?? false;
+  DateTime? get lastSyncTime => _syncService?.lastSyncTime;
+
+  // Set the sync service (called from main.dart)
+  void setSyncService(FirestoreSyncService syncService) {
+    _syncService = syncService;
+    _checkConnectivity();
+  }
+
+  // Check connectivity status
+  Future<void> _checkConnectivity() async {
+    if (_syncService != null) {
+      try {
+        _isOnline = await _syncService!.hasInternetConnection();
+        notifyListeners();
+      } catch (e) {
+        _isOnline = false;
+      }
+    }
+  }
 
   // Initialize Hive and load data
   Future<void> initializeHive() async {
@@ -67,7 +95,7 @@ class HabitDataProvider extends ChangeNotifier {
     if (_entriesBox == null) return;
 
     try {
-      final key = entry.date.toIso8601String().split('T')[0]; // Use date as key
+      final key = entry.date.toIso8601String().split('T')[0];
       await _entriesBox!.put(key, {
         'date': entry.date.toIso8601String(),
         'itemGrades': entry.itemGrades,
@@ -85,6 +113,116 @@ class HabitDataProvider extends ChangeNotifier {
       await _settingsBox!.put('entryMethod', _currentEntryMethod);
     } catch (e) {
       print('Error saving settings to Hive: $e');
+    }
+  }
+
+  // Sync with Firestore
+  Future<void> syncWithFirestore() async {
+    if (_syncService == null) return;
+
+    try {
+      _lastSyncError = null;
+      await _checkConnectivity();
+
+      if (!_isOnline) {
+        _lastSyncError = 'No internet connection';
+        notifyListeners();
+        return;
+      }
+
+      // Perform full sync from Firestore
+      final syncData = await _syncService!.performFullSync();
+
+      // Update local data with synced data
+      if (syncData.isNotEmpty) {
+        // Merge entries
+        final syncedEntries = syncData['entries'] as List<DailyEntry>? ?? [];
+        _mergeEntries(syncedEntries);
+
+        // Merge custom categories
+        final customCategories =
+            syncData['customCategories'] as Map<String, List<HabitItem>>? ?? {};
+        _mergeCustomCategories(customCategories);
+
+        // Update settings
+        final settings = syncData['settings'] as Map<String, dynamic>? ?? {};
+        if (settings.isNotEmpty) {
+          _currentEntryMethod = settings['entryMethod'] ?? _currentEntryMethod;
+          await _saveSettingsToHive();
+        }
+
+        // Save merged data to Hive
+        for (final entry in _entries) {
+          await _saveEntryToHive(entry);
+        }
+
+        notifyListeners();
+      }
+
+      // Sync local changes to Firestore
+      await _syncLocalDataToFirestore();
+    } catch (e) {
+      _lastSyncError = e.toString();
+      print('Sync error: $e');
+      notifyListeners();
+    }
+  }
+
+  void _mergeEntries(List<DailyEntry> syncedEntries) {
+    final entriesMap = <String, DailyEntry>{};
+
+    // Add existing entries to map
+    for (final entry in _entries) {
+      final key = entry.date.toIso8601String().split('T')[0];
+      entriesMap[key] = entry;
+    }
+
+    // Merge synced entries (synced data takes precedence for conflicts)
+    for (final entry in syncedEntries) {
+      final key = entry.date.toIso8601String().split('T')[0];
+      entriesMap[key] = entry;
+    }
+
+    _entries =
+        entriesMap.values.toList()..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  void _mergeCustomCategories(Map<String, List<HabitItem>> customCategories) {
+    for (final categoryEntry in customCategories.entries) {
+      final categoryId = categoryEntry.key;
+      final customItems = categoryEntry.value;
+
+      final categoryIndex = _categories.indexWhere(
+        (cat) => cat.id == categoryId,
+      );
+      if (categoryIndex != -1) {
+        // Remove existing custom items for this category
+        _categories[categoryIndex].items.removeWhere((item) => item.isCustom);
+
+        // Add synced custom items
+        _categories[categoryIndex].items.addAll(customItems);
+      }
+    }
+  }
+
+  Future<void> _syncLocalDataToFirestore() async {
+    if (_syncService == null || !_isOnline) return;
+
+    try {
+      // Sync entries
+      await _syncService!.syncDailyEntries(_entries);
+
+      // Sync custom categories
+      await _syncService!.syncCustomCategories(_categories);
+
+      // Sync settings
+      await _syncService!.syncUserSettings({
+        'entryMethod': _currentEntryMethod,
+      });
+    } catch (e) {
+      print('Error syncing local data to Firestore: $e');
+      _lastSyncError = 'Failed to sync to cloud: $e';
+      notifyListeners();
     }
   }
 
@@ -322,7 +460,23 @@ class HabitDataProvider extends ChangeNotifier {
   void setEntryMethod(String method) {
     _currentEntryMethod = method;
     _saveSettingsToHive();
+
+    // Sync settings to Firestore
+    _syncSettingsToFirestore();
+
     notifyListeners();
+  }
+
+  Future<void> _syncSettingsToFirestore() async {
+    if (_syncService != null && _isOnline) {
+      try {
+        await _syncService!.syncUserSettings({
+          'entryMethod': _currentEntryMethod,
+        });
+      } catch (e) {
+        print('Error syncing settings: $e');
+      }
+    }
   }
 
   void addCustomItem(String categoryId, String nameAr, String nameEn) {
@@ -336,6 +490,10 @@ class HabitDataProvider extends ChangeNotifier {
         isCustom: true,
       );
       _categories[categoryIndex].items.add(newItem);
+
+      // Sync to Firestore
+      _syncCustomCategoriesToFirestore();
+
       notifyListeners();
     }
   }
@@ -344,7 +502,21 @@ class HabitDataProvider extends ChangeNotifier {
     for (var category in _categories) {
       category.items.removeWhere((item) => item.id == itemId && item.isCustom);
     }
+
+    // Sync to Firestore
+    _syncCustomCategoriesToFirestore();
+
     notifyListeners();
+  }
+
+  Future<void> _syncCustomCategoriesToFirestore() async {
+    if (_syncService != null && _isOnline) {
+      try {
+        await _syncService!.syncCustomCategories(_categories);
+      } catch (e) {
+        print('Error syncing custom categories: $e');
+      }
+    }
   }
 
   double calculateDayPercentage(Map<String, String> itemGrades) {
@@ -370,7 +542,10 @@ class HabitDataProvider extends ChangeNotifier {
     return totalItems > 0 ? (totalValue / (totalItems * 10)) * 100 : 0.0;
   }
 
-  void saveDayEntry(DateTime date, Map<String, String> itemGrades) {
+  Future<void> saveDayEntry(
+    DateTime date,
+    Map<String, String> itemGrades,
+  ) async {
     final percentage = calculateDayPercentage(itemGrades);
     final entry = DailyEntry(
       date: date,
@@ -383,7 +558,23 @@ class HabitDataProvider extends ChangeNotifier {
     _entries.sort((a, b) => b.date.compareTo(a.date));
 
     // Save to Hive
-    _saveEntryToHive(entry);
+    await _saveEntryToHive(entry);
+
+    // Sync to Firestore
+    if (_syncService != null) {
+      try {
+        await _checkConnectivity();
+        if (_isOnline) {
+          await _syncService!.syncSingleEntry(entry);
+          _lastSyncError = null;
+        } else {
+          _lastSyncError = 'Entry saved locally. Will sync when online.';
+        }
+      } catch (e) {
+        _lastSyncError = 'Sync error: $e';
+        print('Error syncing entry: $e');
+      }
+    }
 
     notifyListeners();
   }
@@ -443,6 +634,15 @@ class HabitDataProvider extends ChangeNotifier {
       await _entriesBox!.clear();
     }
 
+    // Clear Firestore data if authenticated
+    if (_syncService != null && _isOnline) {
+      try {
+        await _syncService!.deleteUserData();
+      } catch (e) {
+        print('Error clearing Firestore data: $e');
+      }
+    }
+
     notifyListeners();
   }
 
@@ -459,7 +659,6 @@ class HabitDataProvider extends ChangeNotifier {
       for (var category in _categories) {
         for (var item in category.items) {
           if (i % 3 != 0 || item.id == 'fajr') {
-            // Skip some items sometimes
             final gradeValue = random[i % random.length];
             final grade = Grade.allGrades.firstWhere(
               (g) => g.value == gradeValue,
@@ -493,6 +692,11 @@ class HabitDataProvider extends ChangeNotifier {
               .toList(),
       'customItems': _getCustomItems(),
       'settings': {'entryMethod': _currentEntryMethod},
+      'syncInfo': {
+        'lastSyncTime': lastSyncTime?.toIso8601String(),
+        'isOnline': _isOnline,
+        'lastSyncError': _lastSyncError,
+      },
     };
   }
 
@@ -552,6 +756,10 @@ class HabitDataProvider extends ChangeNotifier {
       }
 
       _entries.sort((a, b) => b.date.compareTo(a.date));
+
+      // Sync imported data to Firestore
+      await _syncLocalDataToFirestore();
+
       notifyListeners();
     } catch (e) {
       print('Error importing data: $e');
@@ -591,7 +799,6 @@ class HabitDataProvider extends ChangeNotifier {
 
     for (var entry in sortedEntries) {
       if (entry.percentage >= 70) {
-        // Consider 70%+ as successful day
         if (lastDate == null || entry.date.difference(lastDate).inDays == 1) {
           tempStreak++;
         } else {
@@ -600,10 +807,8 @@ class HabitDataProvider extends ChangeNotifier {
 
         longestStreak = tempStreak > longestStreak ? tempStreak : longestStreak;
 
-        // Check if streak continues to today
-        final today = DateTime.now();
-        if (isSameDay(entry.date, today) ||
-            entry.date.difference(today).inDays == -1) {
+        if (isSameDay(entry.date, DateTime.now()) ||
+            entry.date.difference(DateTime.now()).inDays == -1) {
           currentStreak = tempStreak;
         }
       } else {
@@ -614,5 +819,26 @@ class HabitDataProvider extends ChangeNotifier {
     }
 
     return {'current': currentStreak, 'longest': longestStreak};
+  }
+
+  // Force sync with Firestore
+  Future<void> forceSyncWithFirestore() async {
+    try {
+      await syncWithFirestore();
+    } catch (e) {
+      _lastSyncError = 'Force sync failed: $e';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  // Get sync status for UI
+  Map<String, dynamic> getSyncStatus() {
+    return {
+      'isOnline': _isOnline,
+      'isSyncing': isSyncing,
+      'lastSyncTime': lastSyncTime,
+      'lastSyncError': _lastSyncError,
+    };
   }
 }

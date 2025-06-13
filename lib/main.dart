@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:hive_flutter/adapters.dart';
@@ -6,13 +7,20 @@ import 'package:provider/provider.dart';
 import 'package:taqwa/providers/habit_data_provider.dart';
 import 'package:taqwa/providers/theme_provider.dart';
 import 'package:taqwa/screens/analytics_screen.dart';
+import 'package:taqwa/screens/auth/auth_screens.dart';
 import 'package:taqwa/screens/settings_screen.dart';
 import 'package:taqwa/screens/weekly_screen.dart';
+import 'package:taqwa/services/firebase_auth_service.dart';
+import 'package:taqwa/services/firestore_sync_service.dart';
 
+import 'firebase_options.dart';
 import 'models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Initialize Hive
   await Hive.initFlutter();
@@ -28,7 +36,24 @@ class TaqwaApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => HabitDataProvider()),
+        ChangeNotifierProvider(create: (_) => FirebaseAuthService()),
+        ChangeNotifierProvider(create: (_) => FirestoreSyncService()),
+        ChangeNotifierProxyProvider2<
+          FirebaseAuthService,
+          FirestoreSyncService,
+          HabitDataProvider
+        >(
+          create: (context) => HabitDataProvider(),
+          update: (context, authService, syncService, habitDataProvider) {
+            // Initialize sync service with current user
+            if (authService.isAuthenticated &&
+                authService.currentUser != null) {
+              syncService.initialize(authService.currentUser!.uid);
+              habitDataProvider?.setSyncService(syncService);
+            }
+            return habitDataProvider ?? HabitDataProvider();
+          },
+        ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -40,6 +65,10 @@ class TaqwaApp extends StatelessWidget {
                 themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
             home: const SplashScreen(),
             debugShowCheckedModeBanner: false,
+            routes: {
+              '/auth': (context) => const WelcomeScreen(),
+              '/main': (context) => const MainScreen(),
+            },
           );
         },
       ),
@@ -47,7 +76,7 @@ class TaqwaApp extends StatelessWidget {
   }
 }
 
-// Splash Screen with initialization
+// Enhanced Splash Screen with Firebase initialization
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -64,33 +93,27 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initializeApp() async {
     try {
-      final habitProvider = Provider.of<HabitDataProvider>(
-        context,
-        listen: false,
-      );
-
-      // Initialize Hive and load data
-      await habitProvider.initializeHive();
-
-      // If no data exists, initialize with default data
-      if (habitProvider.entries.isEmpty && habitProvider.categories.isEmpty) {
-        habitProvider.initializeDefaultData();
-      }
-
-      // Navigate to main screen after initialization
+      // Show splash for minimum time
       await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
+        // Navigate to auth wrapper which will determine the appropriate screen
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainScreen()),
+          MaterialPageRoute(
+            builder:
+                (_) => AuthWrapper(
+                  authenticatedWidget: const AuthenticatedSplashScreen(),
+                  unauthenticatedWidget: const WelcomeScreen(),
+                ),
+          ),
         );
       }
     } catch (e) {
       print('Initialization error: $e');
-      // Show error and navigate anyway
+      // Show error and navigate to welcome screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainScreen()),
+          MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         );
       }
     }
@@ -139,7 +162,139 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// Main Screen with Bottom Navigation
+// Authenticated user initialization screen
+class AuthenticatedSplashScreen extends StatefulWidget {
+  const AuthenticatedSplashScreen({super.key});
+
+  @override
+  State<AuthenticatedSplashScreen> createState() =>
+      _AuthenticatedSplashScreenState();
+}
+
+class _AuthenticatedSplashScreenState extends State<AuthenticatedSplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _initializeUserData();
+  }
+
+  Future<void> _initializeUserData() async {
+    try {
+      final habitProvider = Provider.of<HabitDataProvider>(
+        context,
+        listen: false,
+      );
+      final authService = Provider.of<FirebaseAuthService>(
+        context,
+        listen: false,
+      );
+      final syncService = Provider.of<FirestoreSyncService>(
+        context,
+        listen: false,
+      );
+
+      if (authService.currentUser != null) {
+        // Initialize sync service
+        syncService.initialize(authService.currentUser!.uid);
+        habitProvider.setSyncService(syncService);
+
+        // Initialize Hive and load local data
+        await habitProvider.initializeHive();
+
+        // Try to sync with Firestore
+        try {
+          final hasInternet = await syncService.hasInternetConnection();
+          if (hasInternet) {
+            await habitProvider.syncWithFirestore();
+          }
+        } catch (e) {
+          print('Sync error during initialization: $e');
+          // Continue with local data if sync fails
+        }
+
+        // If no data exists, initialize with default data
+        if (habitProvider.entries.isEmpty && habitProvider.categories.isEmpty) {
+          habitProvider.initializeDefaultData();
+        }
+      }
+
+      // Navigate to main screen
+      await Future.delayed(const Duration(seconds: 1));
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+        );
+      }
+    } catch (e) {
+      print('User data initialization error: $e');
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authService = Provider.of<FirebaseAuthService>(context);
+    final syncService = Provider.of<FirestoreSyncService>(context);
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).colorScheme.primary,
+              Theme.of(context).colorScheme.primaryContainer,
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.mosque, size: 80, color: Colors.white),
+              const SizedBox(height: 24),
+              const Text(
+                'تقوى',
+                style: TextStyle(
+                  fontSize: 48,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Welcome back, ${authService.currentUser?.displayName ?? 'User'}',
+                style: const TextStyle(fontSize: 16, color: Colors.white70),
+              ),
+              const SizedBox(height: 48),
+              if (syncService.isSyncing)
+                const Column(
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      'Syncing your data...',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                )
+              else
+                const CircularProgressIndicator(color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Main Screen with Bottom Navigation (unchanged but wrapped for authenticated users)
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -209,7 +364,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// Today Screen - Main Daily Entry Screen
+// Today Screen - Main Daily Entry Screen (unchanged from your original)
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
 
@@ -241,6 +396,7 @@ class _TodayScreenState extends State<TodayScreen> {
   Widget build(BuildContext context) {
     final habitData = Provider.of<HabitDataProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final syncService = Provider.of<FirestoreSyncService>(context);
     final hijriDate = HijriCalendar.fromDate(_selectedDate);
     final screenSize = MediaQuery.of(context).size;
 
@@ -262,6 +418,18 @@ class _TodayScreenState extends State<TodayScreen> {
         ),
         centerTitle: true,
         actions: [
+          // Sync indicator
+          if (syncService.isSyncing)
+            const Padding(
+              padding: EdgeInsets.only(right: 8.0),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.view_module),
             onSelected: (value) {
@@ -349,14 +517,10 @@ class _TodayScreenState extends State<TodayScreen> {
         children: [
           // Daily Progress Card
           Container(
-            margin: EdgeInsets.all(
-              screenSize.width * 0.04,
-            ), // Responsive margin
+            margin: EdgeInsets.all(screenSize.width * 0.04),
             child: Card(
               child: Padding(
-                padding: EdgeInsets.all(
-                  screenSize.width * 0.04,
-                ), // Responsive padding
+                padding: EdgeInsets.all(screenSize.width * 0.04),
                 child: Row(
                   children: [
                     Expanded(
@@ -409,14 +573,16 @@ class _TodayScreenState extends State<TodayScreen> {
       floatingActionButton:
           _todayGrades.isNotEmpty
               ? FloatingActionButton.extended(
-                onPressed: () {
-                  habitData.saveDayEntry(_selectedDate, _todayGrades);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('✅ Day saved successfully!'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                onPressed: () async {
+                  await habitData.saveDayEntry(_selectedDate, _todayGrades);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✅ Day saved successfully!'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
                 },
                 icon: const Icon(Icons.save),
                 label: const Text('Save Day'),
@@ -446,20 +612,17 @@ class _TodayScreenState extends State<TodayScreen> {
     }
   }
 
+  // [Keep all the existing _buildGridView, _buildListView, etc. methods from your original TodayScreen]
+  // I'll include just the grid view here for brevity, but you should copy all the view methods
+
   Widget _buildGridView(HabitDataProvider habitData, Size screenSize) {
-    // Calculate responsive values
-    final horizontalPadding = screenSize.width * 0.04; // 4% of screen width
-    final verticalPadding = screenSize.height * 0.02; // 2% of screen height
+    final horizontalPadding = screenSize.width * 0.04;
+    final verticalPadding = screenSize.height * 0.02;
     final cardMargin = screenSize.height * 0.02;
     final cardPadding = screenSize.width * 0.04;
 
-    // Dynamic cross axis count based on screen width
-    int crossAxisCount =
-        screenSize.width > 600 ? 3 : 2; // 3 columns for tablets, 2 for phones
-
-    // Dynamic aspect ratio based on screen size
-    double childAspectRatio =
-        screenSize.width > 600 ? 2.5 : 2.2; // Wider cards for larger screens
+    int crossAxisCount = screenSize.width > 600 ? 3 : 2;
+    double childAspectRatio = screenSize.width > 600 ? 2.5 : 2.2;
 
     return ListView.builder(
       padding: EdgeInsets.symmetric(
@@ -488,9 +651,7 @@ class _TodayScreenState extends State<TodayScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (screenSize.width >
-                        350) // Only show English name on larger screens
-                      Text(' • ${category.nameEn}'),
+                    if (screenSize.width > 350) Text(' • ${category.nameEn}'),
                   ],
                 ),
                 SizedBox(height: screenSize.height * 0.02),
@@ -516,6 +677,133 @@ class _TodayScreenState extends State<TodayScreen> {
       },
     );
   }
+
+  Widget _buildHabitItemCard(HabitItem item, Size screenSize) {
+    final currentGrade = _todayGrades[item.id];
+
+    return Card(
+      elevation: currentGrade != null ? 4 : 1,
+      color:
+          currentGrade != null
+              ? Grade.allGrades
+                  .firstWhere((g) => g.symbol == currentGrade)
+                  .color
+                  .withOpacity(0.1)
+              : null,
+      child: InkWell(
+        onTap: () => _showGradeDialog(item),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: EdgeInsets.all(screenSize.width * 0.03),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  item.nameAr,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: screenSize.width < 400 ? 12 : 14,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              SizedBox(height: screenSize.height * 0.005),
+              Flexible(
+                child: Text(
+                  item.nameEn,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: screenSize.width < 400 ? 10 : 12,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (currentGrade != null) ...[
+                SizedBox(height: screenSize.height * 0.01),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: screenSize.width * 0.02,
+                    vertical: screenSize.height * 0.005,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        Grade.allGrades
+                            .firstWhere((g) => g.symbol == currentGrade)
+                            .color,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    currentGrade,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: screenSize.width < 400 ? 10 : 12,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGradeDialog(HabitItem item) {
+    final screenSize = MediaQuery.of(context).size;
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Column(
+              children: [
+                Text(item.nameAr),
+                Text(
+                  item.nameEn,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+            content: Wrap(
+              spacing: screenSize.width * 0.02,
+              runSpacing: screenSize.height * 0.01,
+              children:
+                  Grade.allGrades.map((grade) {
+                    return FilterChip(
+                      label: Text('${grade.symbol} (${grade.value})'),
+                      selected: _todayGrades[item.id] == grade.symbol,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _todayGrades[item.id] = grade.symbol;
+                          } else {
+                            _todayGrades.remove(item.id);
+                          }
+                        });
+                        Navigator.pop(context);
+                      },
+                      backgroundColor: grade.color.withOpacity(0.1),
+                      selectedColor: grade.color.withOpacity(0.3),
+                    );
+                  }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  // Add the other view methods (_buildListView, _buildCardView, _buildSwipeView) here
+  // Copy them from your original code
 
   Widget _buildListView(HabitDataProvider habitData, Size screenSize) {
     final allItems = habitData.categories.expand((cat) => cat.items).toList();
@@ -670,87 +958,6 @@ class _TodayScreenState extends State<TodayScreen> {
     );
   }
 
-  Widget _buildHabitItemCard(HabitItem item, Size screenSize) {
-    final currentGrade = _todayGrades[item.id];
-
-    return Card(
-      elevation: currentGrade != null ? 4 : 1,
-      color:
-          currentGrade != null
-              ? Grade.allGrades
-                  .firstWhere((g) => g.symbol == currentGrade)
-                  .color
-                  .withOpacity(0.1)
-              : null,
-      child: InkWell(
-        onTap: () => _showGradeDialog(item),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(screenSize.width * 0.03),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  item.nameAr,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize:
-                        screenSize.width < 400
-                            ? 12
-                            : 14, // Responsive font size
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2, // Allow 2 lines for longer text
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(height: screenSize.height * 0.005),
-              Flexible(
-                child: Text(
-                  item.nameEn,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize:
-                        screenSize.width < 400
-                            ? 10
-                            : 12, // Responsive font size
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2, // Allow 2 lines for longer text
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (currentGrade != null) ...[
-                SizedBox(height: screenSize.height * 0.01),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: screenSize.width * 0.02,
-                    vertical: screenSize.height * 0.005,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        Grade.allGrades
-                            .firstWhere((g) => g.symbol == currentGrade)
-                            .color,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    currentGrade,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: screenSize.width < 400 ? 10 : 12,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildGradeSelector(String itemId) {
     final currentGrade = _todayGrades[itemId];
 
@@ -787,55 +994,6 @@ class _TodayScreenState extends State<TodayScreen> {
           }
         });
       },
-    );
-  }
-
-  void _showGradeDialog(HabitItem item) {
-    final screenSize = MediaQuery.of(context).size;
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Column(
-              children: [
-                Text(item.nameAr),
-                Text(
-                  item.nameEn,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-            content: Wrap(
-              spacing: screenSize.width * 0.02,
-              runSpacing: screenSize.height * 0.01,
-              children:
-                  Grade.allGrades.map((grade) {
-                    return FilterChip(
-                      label: Text('${grade.symbol} (${grade.value})'),
-                      selected: _todayGrades[item.id] == grade.symbol,
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _todayGrades[item.id] = grade.symbol;
-                          } else {
-                            _todayGrades.remove(item.id);
-                          }
-                        });
-                        Navigator.pop(context);
-                      },
-                      backgroundColor: grade.color.withOpacity(0.1),
-                      selectedColor: grade.color.withOpacity(0.3),
-                    );
-                  }).toList(),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
     );
   }
 }
