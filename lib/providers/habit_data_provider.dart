@@ -6,6 +6,11 @@ import '../models.dart';
 import '../services/firestore_sync_service.dart';
 
 class HabitDataProvider extends ChangeNotifier {
+  // CRITICAL FIX: Initialize with default data immediately
+  HabitDataProvider() {
+    // Initialize default categories immediately to prevent empty state
+    initializeDefaultData();
+  }
   List<HabitCategory> _categories = [];
   List<DailyEntry> _entries = [];
   String _currentEntryMethod = 'grid'; // 'grid', 'list', 'card', 'swipe'

@@ -143,8 +143,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child:
                       user?.photoURL == null
                           ? Text(
-                            user?.displayName?.substring(0, 1).toUpperCase() ??
-                                'U',
+                            (user?.displayName?.isNotEmpty == true)
+                                ? user!.displayName![0].toUpperCase()
+                                : 'U',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
