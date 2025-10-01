@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../providers/habit_data_provider.dart';
 import '../providers/theme_provider.dart';
 import '../screens/auth/auth_screens.dart';
+import '../screens/category_management_screen.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/firestore_sync_service.dart';
 
@@ -395,10 +396,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           color: Theme.of(context).colorScheme.primary,
         ),
         title: const Text('Manage Categories'),
-        subtitle: const Text('Add, edit, or remove habit categories'),
+        subtitle: const Text('Add, edit, or remove habit categories and items'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
-          _showManageCategoriesDialog(habitData);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const CategoryManagementScreen(),
+            ),
+          );
         },
       ),
     );

@@ -11,8 +11,9 @@ import 'package:taqwa/services/firebase_auth_service.dart';
 import 'package:taqwa/services/firestore_sync_service.dart';
 
 import 'firebase_options.dart';
-// Import the new DailyScreen instead of TodayScreen
-import 'screens/daily_screen.dart'; // Updated import
+import 'screens/daily_screen.dart';
+import 'screens/template_selection_screen.dart';
+import 'data/templates.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -199,26 +200,39 @@ class _AuthenticatedSplashScreenState extends State<AuthenticatedSplashScreen> {
       );
 
       if (authService.currentUser != null) {
-        // Initialize sync service
         syncService.initialize(authService.currentUser!.uid);
         habitProvider.setSyncService(syncService);
 
-        // Initialize from Firebase
-        await habitProvider.initializeFromFirebase();
+        final hasCategories = await syncService.userHasCategories();
+        
+        if (!hasCategories) {
+          await Future.delayed(const Duration(seconds: 1));
+          
+          if (habitProvider.entries.isNotEmpty) {
+            await _migrateExistingUser(habitProvider);
+            if (mounted) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const MainScreen()),
+              );
+            }
+          } else {
+            if (mounted) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const TemplateSelectionScreen()),
+              );
+            }
+          }
+        } else {
+          await habitProvider.initializeFromFirebase();
+          
+          await Future.delayed(const Duration(seconds: 1));
 
-        // If no data exists, initialize with default data
-        if (habitProvider.entries.isEmpty && habitProvider.categories.isEmpty) {
-          habitProvider.initializeDefaultData();
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const MainScreen()),
+            );
+          }
         }
-      }
-
-      // Navigate to main screen
-      await Future.delayed(const Duration(seconds: 1));
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainScreen()),
-        );
       }
     } catch (e) {
       print('User data initialization error: $e');
@@ -227,6 +241,25 @@ class _AuthenticatedSplashScreenState extends State<AuthenticatedSplashScreen> {
           MaterialPageRoute(builder: (_) => const MainScreen()),
         );
       }
+    }
+  }
+
+  Future<void> _migrateExistingUser(HabitDataProvider habitProvider) async {
+    try {
+      final defaultTemplate = HabitTemplates.getTemplateById('default_islamic');
+      await habitProvider.applyTemplate(defaultTemplate);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your account has been updated with new features!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Migration error: $e');
+      habitProvider.initializeDefaultData();
     }
   }
 

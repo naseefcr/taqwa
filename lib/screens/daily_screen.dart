@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../providers/habit_data_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/firestore_sync_service.dart';
 
 class DailyScreen extends StatefulWidget {
   final DateTime? initialDate;
@@ -129,7 +128,6 @@ class _DailyScreenState extends State<DailyScreen> {
   Widget build(BuildContext context) {
     final habitData = Provider.of<HabitDataProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final syncService = Provider.of<FirestoreSyncService>(context);
     final hijriDate = HijriCalendar.fromDate(_selectedDate);
     final screenSize = MediaQuery.of(context).size;
 
@@ -286,9 +284,6 @@ class _DailyScreenState extends State<DailyScreen> {
 
   Widget _buildDateStatusCard(HabitDataProvider habitData, Size screenSize) {
     final todayPercentage = habitData.calculateDayPercentage(_currentGrades);
-    final hasExistingEntry = habitData.entries.any(
-      (entry) => _isSameDay(entry.date, _selectedDate),
-    );
 
     return Container(
       margin: EdgeInsets.all(screenSize.width * 0.04),

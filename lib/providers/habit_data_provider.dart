@@ -82,9 +82,13 @@ class HabitDataProvider extends ChangeNotifier {
         _entries = syncedEntries;
         _entries.sort((a, b) => b.date.compareTo(a.date));
 
-        // Load custom categories
-        final customCategories = syncData['customCategories'] as Map<String, List<HabitItem>>? ?? {};
-        _mergeCustomCategories(customCategories);
+        // Load categories and items
+        final syncedCategories = syncData['categories'] as List<HabitCategory>? ?? [];
+        final syncedItems = syncData['items'] as List<HabitItem>? ?? [];
+        
+        if (syncedCategories.isNotEmpty) {
+          _loadCategoriesAndItems(syncedCategories, syncedItems);
+        }
 
         // Load settings
         final settings = syncData['settings'] as Map<String, dynamic>? ?? {};
@@ -99,6 +103,18 @@ class HabitDataProvider extends ChangeNotifier {
       _lastSyncError = 'Failed to load from cloud: $e';
       notifyListeners();
     }
+  }
+
+  void _loadCategoriesAndItems(List<HabitCategory> categories, List<HabitItem> items) {
+    _categories = categories.map((category) {
+      final categoryItems = items
+          .where((item) => item.categoryId == category.id && item.isEnabled)
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+      
+      return category.copyWith(items: categoryItems);
+    }).where((category) => category.isEnabled).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
   }
 
   // Sync with Firestore
@@ -124,10 +140,13 @@ class HabitDataProvider extends ChangeNotifier {
         final syncedEntries = syncData['entries'] as List<DailyEntry>? ?? [];
         _mergeEntries(syncedEntries);
 
-        // Merge custom categories
-        final customCategories =
-            syncData['customCategories'] as Map<String, List<HabitItem>>? ?? {};
-        _mergeCustomCategories(customCategories);
+        // Load categories and items
+        final syncedCategories = syncData['categories'] as List<HabitCategory>? ?? [];
+        final syncedItems = syncData['items'] as List<HabitItem>? ?? [];
+        
+        if (syncedCategories.isNotEmpty) {
+          _loadCategoriesAndItems(syncedCategories, syncedItems);
+        }
 
         // Update settings
         final settings = syncData['settings'] as Map<String, dynamic>? ?? {};
@@ -166,23 +185,6 @@ class HabitDataProvider extends ChangeNotifier {
         entriesMap.values.toList()..sort((a, b) => b.date.compareTo(a.date));
   }
 
-  void _mergeCustomCategories(Map<String, List<HabitItem>> customCategories) {
-    for (final categoryEntry in customCategories.entries) {
-      final categoryId = categoryEntry.key;
-      final customItems = categoryEntry.value;
-
-      final categoryIndex = _categories.indexWhere(
-        (cat) => cat.id == categoryId,
-      );
-      if (categoryIndex != -1) {
-        // Remove existing custom items for this category
-        _categories[categoryIndex].items.removeWhere((item) => item.isCustom);
-
-        // Add synced custom items
-        _categories[categoryIndex].items.addAll(customItems);
-      }
-    }
-  }
 
   Future<void> _syncLocalDataToFirestore() async {
     if (_syncService == null || !_isOnline) return;
@@ -191,8 +193,15 @@ class HabitDataProvider extends ChangeNotifier {
       // Sync entries
       await _syncService!.syncDailyEntries(_entries);
 
-      // Sync custom categories
-      await _syncService!.syncCustomCategories(_categories);
+      // Sync categories
+      await _syncService!.syncCategories(_categories);
+
+      // Sync items
+      final allItems = <HabitItem>[];
+      for (final category in _categories) {
+        allItems.addAll(category.items);
+      }
+      await _syncService!.syncItems(allItems);
 
       // Sync settings
       await _syncService!.syncUserSettings({
@@ -203,6 +212,67 @@ class HabitDataProvider extends ChangeNotifier {
       _lastSyncError = 'Failed to sync to cloud: $e';
       notifyListeners();
     }
+  }
+
+  Future<void> applyTemplate(Template template) async {
+    if (_syncService == null) return;
+
+    try {
+      await _checkConnectivity();
+      
+      if (_isOnline) {
+        await _syncService!.applyTemplate(template);
+        await loadFromFirestore();
+      } else {
+        _loadTemplateLocally(template);
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      print('Error applying template: $e');
+      _loadTemplateLocally(template);
+      notifyListeners();
+    }
+  }
+
+  void _loadTemplateLocally(Template template) {
+    _categories.clear();
+    final now = DateTime.now();
+
+    for (final categoryTemplate in template.categories) {
+      final items = categoryTemplate.items.map((itemTemplate) {
+        return HabitItem(
+          id: itemTemplate.id,
+          nameAr: itemTemplate.nameAr,
+          nameEn: itemTemplate.nameEn,
+          categoryId: categoryTemplate.id,
+          order: itemTemplate.order,
+          isCustom: false,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now,
+        );
+      }).toList();
+
+      _categories.add(HabitCategory(
+        id: categoryTemplate.id,
+        nameAr: categoryTemplate.nameAr,
+        nameEn: categoryTemplate.nameEn,
+        icon: IconData(
+          categoryTemplate.iconCodePoint,
+          fontFamily: categoryTemplate.iconFontFamily,
+        ),
+        color: Color(categoryTemplate.colorValue),
+        items: items,
+        order: categoryTemplate.order,
+        isCustom: false,
+        isEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+      ));
+    }
+
+    _categories.sort((a, b) => a.order.compareTo(b.order));
   }
 
   void initializeDefaultData() {
@@ -457,6 +527,108 @@ class HabitDataProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> addCategory(HabitCategory category) async {
+    _categories.add(category);
+    _categories.sort((a, b) => a.order.compareTo(b.order));
+
+    if (_syncService != null && _isOnline) {
+      try {
+        await _syncService!.addCategory(category);
+      } catch (e) {
+        print('Error adding category to Firestore: $e');
+      }
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> updateCategory(HabitCategory category) async {
+    final index = _categories.indexWhere((c) => c.id == category.id);
+    if (index != -1) {
+      _categories[index] = category;
+      _categories.sort((a, b) => a.order.compareTo(b.order));
+
+      if (_syncService != null && _isOnline) {
+        try {
+          await _syncService!.updateCategory(category);
+        } catch (e) {
+          print('Error updating category in Firestore: $e');
+        }
+      }
+
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteCategory(String categoryId) async {
+    _categories.removeWhere((c) => c.id == categoryId);
+
+    if (_syncService != null && _isOnline) {
+      try {
+        await _syncService!.deleteCategory(categoryId);
+      } catch (e) {
+        print('Error deleting category from Firestore: $e');
+      }
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> addItem(String categoryId, HabitItem item) async {
+    final categoryIndex = _categories.indexWhere((cat) => cat.id == categoryId);
+    if (categoryIndex != -1) {
+      _categories[categoryIndex].items.add(item);
+      _categories[categoryIndex].items.sort((a, b) => a.order.compareTo(b.order));
+
+      if (_syncService != null && _isOnline) {
+        try {
+          await _syncService!.addItem(item);
+        } catch (e) {
+          print('Error adding item to Firestore: $e');
+        }
+      }
+
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateItem(HabitItem item) async {
+    for (var category in _categories) {
+      final itemIndex = category.items.indexWhere((i) => i.id == item.id);
+      if (itemIndex != -1) {
+        category.items[itemIndex] = item;
+        category.items.sort((a, b) => a.order.compareTo(b.order));
+
+        if (_syncService != null && _isOnline) {
+          try {
+            await _syncService!.updateItem(item);
+          } catch (e) {
+            print('Error updating item in Firestore: $e');
+          }
+        }
+
+        notifyListeners();
+        break;
+      }
+    }
+  }
+
+  Future<void> deleteItem(String itemId) async {
+    for (var category in _categories) {
+      category.items.removeWhere((item) => item.id == itemId);
+    }
+
+    if (_syncService != null && _isOnline) {
+      try {
+        await _syncService!.deleteItem(itemId);
+      } catch (e) {
+        print('Error deleting item from Firestore: $e');
+      }
+    }
+
+    notifyListeners();
+  }
+
   void addCustomItem(String categoryId, String nameAr, String nameEn) {
     final categoryIndex = _categories.indexWhere((cat) => cat.id == categoryId);
     if (categoryIndex != -1) {
@@ -465,36 +637,18 @@ class HabitDataProvider extends ChangeNotifier {
         nameAr: nameAr,
         nameEn: nameEn,
         categoryId: categoryId,
+        order: _categories[categoryIndex].items.length,
         isCustom: true,
+        isEnabled: true,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
-      _categories[categoryIndex].items.add(newItem);
-
-      // Sync to Firestore
-      _syncCustomCategoriesToFirestore();
-
-      notifyListeners();
+      addItem(categoryId, newItem);
     }
   }
 
   void removeCustomItem(String itemId) {
-    for (var category in _categories) {
-      category.items.removeWhere((item) => item.id == itemId && item.isCustom);
-    }
-
-    // Sync to Firestore
-    _syncCustomCategoriesToFirestore();
-
-    notifyListeners();
-  }
-
-  Future<void> _syncCustomCategoriesToFirestore() async {
-    if (_syncService != null && _isOnline) {
-      try {
-        await _syncService!.syncCustomCategories(_categories);
-      } catch (e) {
-        print('Error syncing custom categories: $e');
-      }
-    }
+    deleteItem(itemId);
   }
 
   double calculateDayPercentage(Map<String, String> itemGrades) {

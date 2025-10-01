@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../models.dart';
 
@@ -122,9 +123,12 @@ class FirestoreSyncService extends ChangeNotifier {
     }
   }
 
-  // Sync custom categories and items
-  Future<void> syncCustomCategories(List<HabitCategory> categories) async {
+  // Sync all categories
+  Future<void> syncCategories(List<HabitCategory> categories) async {
     if (_currentUserId == null) return;
+
+    _isSyncing = true;
+    notifyListeners();
 
     try {
       final batch = _firestore.batch();
@@ -134,38 +138,191 @@ class FirestoreSyncService extends ChangeNotifier {
           .collection('categories');
 
       for (final category in categories) {
-        // Only sync custom items
-        final customItems =
-            category.items.where((item) => item.isCustom).toList();
-
-        if (customItems.isNotEmpty) {
-          final docRef = userCategoriesRef.doc(category.id);
-          batch.set(docRef, {
-            'categoryId': category.id,
-            'customItems':
-                customItems
-                    .map(
-                      (item) => {
-                        'id': item.id,
-                        'nameAr': item.nameAr,
-                        'nameEn': item.nameEn,
-                        'categoryId': item.categoryId,
-                        'isCustom': item.isCustom,
-                      },
-                    )
-                    .toList(),
-            'lastUpdated': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        }
+        final docRef = userCategoriesRef.doc(category.id);
+        batch.set(docRef, category.toFirestore(), SetOptions(merge: true));
       }
 
       await batch.commit();
+      _lastSyncTime = DateTime.now();
     } catch (e) {
       if (kDebugMode) {
-        print('Error syncing custom categories: $e');
+        print('Error syncing categories: $e');
+      }
+      rethrow;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  // Add single category
+  Future<void> addCategory(HabitCategory category) async {
+    if (_currentUserId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('categories')
+          .doc(category.id)
+          .set(category.toFirestore());
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error adding category: $e');
       }
       rethrow;
     }
+  }
+
+  // Update category
+  Future<void> updateCategory(HabitCategory category) async {
+    if (_currentUserId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('categories')
+          .doc(category.id)
+          .update(category.toFirestore());
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error updating category: $e');
+      }
+      rethrow;
+    }
+  }
+
+  // Delete category
+  Future<void> deleteCategory(String categoryId) async {
+    if (_currentUserId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('categories')
+          .doc(categoryId)
+          .delete();
+
+      final itemsSnapshot = await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('items')
+          .where('categoryId', isEqualTo: categoryId)
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in itemsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error deleting category: $e');
+      }
+      rethrow;
+    }
+  }
+
+  // Sync all items
+  Future<void> syncItems(List<HabitItem> items) async {
+    if (_currentUserId == null) return;
+
+    _isSyncing = true;
+    notifyListeners();
+
+    try {
+      final batch = _firestore.batch();
+      final userItemsRef = _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('items');
+
+      for (final item in items) {
+        final docRef = userItemsRef.doc(item.id);
+        batch.set(docRef, item.toFirestore(), SetOptions(merge: true));
+      }
+
+      await batch.commit();
+      _lastSyncTime = DateTime.now();
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error syncing items: $e');
+      }
+      rethrow;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  // Add single item
+  Future<void> addItem(HabitItem item) async {
+    if (_currentUserId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('items')
+          .doc(item.id)
+          .set(item.toFirestore());
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error adding item: $e');
+      }
+      rethrow;
+    }
+  }
+
+  // Update item
+  Future<void> updateItem(HabitItem item) async {
+    if (_currentUserId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('items')
+          .doc(item.id)
+          .update(item.toFirestore());
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error updating item: $e');
+      }
+      rethrow;
+    }
+  }
+
+  // Delete item
+  Future<void> deleteItem(String itemId) async {
+    if (_currentUserId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('items')
+          .doc(itemId)
+          .delete();
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error deleting item: $e');
+      }
+      rethrow;
+    }
+  }
+
+  // Keep old method for backward compatibility
+  Future<void> syncCustomCategories(List<HabitCategory> categories) async {
+    await syncCategories(categories);
+    
+    final allItems = <HabitItem>[];
+    for (final category in categories) {
+      allItems.addAll(category.items);
+    }
+    await syncItems(allItems);
   }
 
   // Sync user settings
@@ -219,46 +376,67 @@ class FirestoreSyncService extends ChangeNotifier {
     }
   }
 
-  // Fetch custom categories
-  Future<Map<String, List<HabitItem>>> fetchCustomCategories() async {
-    if (_currentUserId == null) return {};
+  // Fetch all categories
+  Future<List<HabitCategory>> fetchCategories() async {
+    if (_currentUserId == null) return [];
 
     try {
-      final snapshot =
-          await _firestore
-              .collection('users')
-              .doc(_currentUserId)
-              .collection('categories')
-              .get();
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('categories')
+          .orderBy('order')
+          .get();
 
-      final customCategories = <String, List<HabitItem>>{};
-
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final categoryId = data['categoryId'] as String;
-        final customItemsData = data['customItems'] as List<dynamic>? ?? [];
-
-        final customItems =
-            customItemsData.map((itemData) {
-              return HabitItem(
-                id: itemData['id'],
-                nameAr: itemData['nameAr'],
-                nameEn: itemData['nameEn'],
-                categoryId: itemData['categoryId'],
-                isCustom: itemData['isCustom'] ?? true,
-              );
-            }).toList();
-
-        customCategories[categoryId] = customItems;
-      }
-
-      return customCategories;
+      return snapshot.docs.map((doc) {
+        return HabitCategory.fromFirestore(doc.data());
+      }).toList();
     } catch (e) {
       if (kDebugMode) {
-        print('Error fetching custom categories: $e');
+        print('Error fetching categories: $e');
       }
-      return {};
+      return [];
     }
+  }
+
+  // Fetch all items
+  Future<List<HabitItem>> fetchItems() async {
+    if (_currentUserId == null) return [];
+
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('items')
+          .orderBy('order')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        return HabitItem.fromFirestore(doc.data());
+      }).toList();
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error fetching items: $e');
+      }
+      return [];
+    }
+  }
+
+  // Keep old method for backward compatibility
+  Future<Map<String, List<HabitItem>>> fetchCustomCategories() async {
+    final items = await fetchItems();
+    final customCategories = <String, List<HabitItem>>{};
+
+    for (final item in items) {
+      if (item.isCustom) {
+        if (!customCategories.containsKey(item.categoryId)) {
+          customCategories[item.categoryId] = [];
+        }
+        customCategories[item.categoryId]!.add(item);
+      }
+    }
+
+    return customCategories;
   }
 
   // Fetch user settings
@@ -293,7 +471,8 @@ class FirestoreSyncService extends ChangeNotifier {
     try {
       final results = await Future.wait([
         fetchDailyEntries(),
-        fetchCustomCategories(),
+        fetchCategories(),
+        fetchItems(),
         fetchUserSettings(),
       ]);
 
@@ -301,8 +480,9 @@ class FirestoreSyncService extends ChangeNotifier {
 
       return {
         'entries': results[0] as List<DailyEntry>,
-        'customCategories': results[1] as Map<String, List<HabitItem>>,
-        'settings': results[2] as Map<String, dynamic>,
+        'categories': results[1] as List<HabitCategory>,
+        'items': results[2] as List<HabitItem>,
+        'settings': results[3] as Map<String, dynamic>,
       };
     } catch (e) {
       if (kDebugMode) {
@@ -312,6 +492,110 @@ class FirestoreSyncService extends ChangeNotifier {
     } finally {
       _isSyncing = false;
       notifyListeners();
+    }
+  }
+
+  // Apply template to user's account
+  Future<void> applyTemplate(Template template) async {
+    if (_currentUserId == null) return;
+
+    _isSyncing = true;
+    notifyListeners();
+
+    try {
+      final batch = _firestore.batch();
+      final now = DateTime.now();
+
+      final categoriesRef = _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('categories');
+
+      final itemsRef = _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('items');
+
+      for (final categoryTemplate in template.categories) {
+        final category = HabitCategory(
+          id: categoryTemplate.id,
+          nameAr: categoryTemplate.nameAr,
+          nameEn: categoryTemplate.nameEn,
+          icon: IconData(
+            categoryTemplate.iconCodePoint,
+            fontFamily: categoryTemplate.iconFontFamily,
+          ),
+          color: Color(categoryTemplate.colorValue),
+          items: [],
+          order: categoryTemplate.order,
+          isCustom: false,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now,
+        );
+
+        batch.set(
+          categoriesRef.doc(category.id),
+          category.toFirestore(),
+        );
+
+        for (final itemTemplate in categoryTemplate.items) {
+          final item = HabitItem(
+            id: itemTemplate.id,
+            nameAr: itemTemplate.nameAr,
+            nameEn: itemTemplate.nameEn,
+            categoryId: categoryTemplate.id,
+            order: itemTemplate.order,
+            isCustom: false,
+            isEnabled: true,
+            createdAt: now,
+            updatedAt: now,
+          );
+
+          batch.set(
+            itemsRef.doc(item.id),
+            item.toFirestore(),
+          );
+        }
+      }
+
+      await batch.commit();
+
+      await syncUserSettings({
+        'selectedTemplate': template.id,
+        'templateAppliedAt': now.toIso8601String(),
+      });
+
+      _lastSyncTime = DateTime.now();
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error applying template: $e');
+      }
+      rethrow;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  // Check if user has any categories
+  Future<bool> userHasCategories() async {
+    if (_currentUserId == null) return false;
+
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('categories')
+          .limit(1)
+          .get();
+
+      return snapshot.docs.isNotEmpty;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error checking user categories: $e');
+      }
+      return false;
     }
   }
 
@@ -355,7 +639,7 @@ class FirestoreSyncService extends ChangeNotifier {
       final batch = _firestore.batch();
 
       // Delete all subcollections
-      final collections = ['entries', 'categories', 'settings', 'profile'];
+      final collections = ['entries', 'categories', 'items', 'settings', 'profile'];
 
       for (final collection in collections) {
         final snapshot =
