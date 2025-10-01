@@ -1,5 +1,4 @@
 // Theme Provider
-import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 
 class ThemeProvider extends ChangeNotifier {
@@ -12,36 +11,16 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  ThemeData get lightTheme => FlexThemeData.light(
-    scheme: FlexScheme.materialBaseline,
-    surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
-    blendLevel: 7,
-    subThemesData: const FlexSubThemesData(
-      blendOnLevel: 10,
-      blendOnColors: false,
-      useTextTheme: true,
-      useM2StyleDividerInM3: true,
-      alignedDropdown: true,
-      useInputDecoratorThemeInDialogs: true,
-    ),
-    visualDensity: FlexColorScheme.comfortablePlatformDensity,
+  ThemeData get lightTheme => ThemeData(
     useMaterial3: true,
-    swapLegacyOnMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
   );
 
-  ThemeData get darkTheme => FlexThemeData.dark(
-    scheme: FlexScheme.materialBaseline,
-    surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
-    blendLevel: 13,
-    subThemesData: const FlexSubThemesData(
-      blendOnLevel: 20,
-      useTextTheme: true,
-      useM2StyleDividerInM3: true,
-      alignedDropdown: true,
-      useInputDecoratorThemeInDialogs: true,
-    ),
-    visualDensity: FlexColorScheme.comfortablePlatformDensity,
+  ThemeData get darkTheme => ThemeData(
     useMaterial3: true,
-    swapLegacyOnMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: Colors.green,
+      brightness: Brightness.dark,
+    ),
   );
 }

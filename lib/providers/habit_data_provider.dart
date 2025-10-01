@@ -1,28 +1,23 @@
 // providers/habit_data_provider.dart
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models.dart';
 import '../services/firestore_sync_service.dart';
 
 class HabitDataProvider extends ChangeNotifier {
-  // CRITICAL FIX: Initialize with default data immediately
   HabitDataProvider() {
-    // Initialize default categories immediately to prevent empty state
     initializeDefaultData();
   }
+  
   List<HabitCategory> _categories = [];
   List<DailyEntry> _entries = [];
-  String _currentEntryMethod = 'grid'; // 'grid', 'list', 'card', 'swipe'
+  String _currentEntryMethod = 'grid';
+  bool _isInitialized = false;
 
   // Firebase sync service
   FirestoreSyncService? _syncService;
   bool _isOnline = false;
   String? _lastSyncError;
-
-  // Hive boxes
-  Box<Map>? _entriesBox;
-  Box<String>? _settingsBox;
 
   List<HabitCategory> get categories => _categories;
   List<DailyEntry> get entries => _entries;
@@ -36,6 +31,10 @@ class HabitDataProvider extends ChangeNotifier {
   void setSyncService(FirestoreSyncService syncService) {
     _syncService = syncService;
     _checkConnectivity();
+    // Initialize data from Firebase when sync service is set
+    if (!_isInitialized) {
+      initializeFromFirebase();
+    }
   }
 
   // Check connectivity status
@@ -50,74 +49,55 @@ class HabitDataProvider extends ChangeNotifier {
     }
   }
 
-  // Initialize Hive and load data
-  Future<void> initializeHive() async {
+  // Initialize data from Firebase
+  Future<void> initializeFromFirebase() async {
+    if (_syncService == null) return;
+    
     try {
-      _entriesBox = await Hive.openBox<Map>('entries');
-      _settingsBox = await Hive.openBox<String>('settings');
-
-      await _loadDataFromHive();
-      await _loadSettingsFromHive();
-    } catch (e) {
-      print('Error initializing Hive: $e');
-      // Continue with default data if Hive fails
-      initializeDefaultData();
-    }
-  }
-
-  Future<void> _loadDataFromHive() async {
-    if (_entriesBox == null) return;
-
-    _entries.clear();
-
-    for (var key in _entriesBox!.keys) {
-      try {
-        final entryMap = _entriesBox!.get(key);
-        if (entryMap != null) {
-          final entry = DailyEntry(
-            date: DateTime.parse(entryMap['date']),
-            itemGrades: Map<String, String>.from(entryMap['itemGrades']),
-            percentage: entryMap['percentage']?.toDouble() ?? 0.0,
-          );
-          _entries.add(entry);
-        }
-      } catch (e) {
-        print('Error loading entry $key: $e');
+      await _checkConnectivity();
+      
+      if (_isOnline) {
+        await loadFromFirestore();
       }
-    }
-
-    _entries.sort((a, b) => b.date.compareTo(a.date));
-  }
-
-  Future<void> _loadSettingsFromHive() async {
-    if (_settingsBox == null) return;
-
-    _currentEntryMethod =
-        _settingsBox!.get('entryMethod', defaultValue: 'grid')!;
-  }
-
-  Future<void> _saveEntryToHive(DailyEntry entry) async {
-    if (_entriesBox == null) return;
-
-    try {
-      final key = entry.date.toIso8601String().split('T')[0];
-      await _entriesBox!.put(key, {
-        'date': entry.date.toIso8601String(),
-        'itemGrades': entry.itemGrades,
-        'percentage': entry.percentage,
-      });
+      
+      _isInitialized = true;
+      notifyListeners();
     } catch (e) {
-      print('Error saving entry to Hive: $e');
+      print('Error initializing from Firebase: $e');
+      // Continue with default data if Firebase fails
+      _isInitialized = true;
     }
   }
 
-  Future<void> _saveSettingsToHive() async {
-    if (_settingsBox == null) return;
+  // Load all data from Firestore
+  Future<void> loadFromFirestore() async {
+    if (_syncService == null || !_isOnline) return;
 
     try {
-      await _settingsBox!.put('entryMethod', _currentEntryMethod);
+      final syncData = await _syncService!.performFullSync();
+      
+      if (syncData.isNotEmpty) {
+        // Load entries
+        final syncedEntries = syncData['entries'] as List<DailyEntry>? ?? [];
+        _entries = syncedEntries;
+        _entries.sort((a, b) => b.date.compareTo(a.date));
+
+        // Load custom categories
+        final customCategories = syncData['customCategories'] as Map<String, List<HabitItem>>? ?? {};
+        _mergeCustomCategories(customCategories);
+
+        // Load settings
+        final settings = syncData['settings'] as Map<String, dynamic>? ?? {};
+        if (settings.isNotEmpty) {
+          _currentEntryMethod = settings['entryMethod'] ?? _currentEntryMethod;
+        }
+        
+        notifyListeners();
+      }
     } catch (e) {
-      print('Error saving settings to Hive: $e');
+      print('Error loading from Firestore: $e');
+      _lastSyncError = 'Failed to load from cloud: $e';
+      notifyListeners();
     }
   }
 
@@ -153,12 +133,6 @@ class HabitDataProvider extends ChangeNotifier {
         final settings = syncData['settings'] as Map<String, dynamic>? ?? {};
         if (settings.isNotEmpty) {
           _currentEntryMethod = settings['entryMethod'] ?? _currentEntryMethod;
-          await _saveSettingsToHive();
-        }
-
-        // Save merged data to Hive
-        for (final entry in _entries) {
-          await _saveEntryToHive(entry);
         }
 
         notifyListeners();
@@ -464,7 +438,6 @@ class HabitDataProvider extends ChangeNotifier {
 
   void setEntryMethod(String method) {
     _currentEntryMethod = method;
-    _saveSettingsToHive();
 
     // Sync settings to Firestore
     _syncSettingsToFirestore();
@@ -562,9 +535,6 @@ class HabitDataProvider extends ChangeNotifier {
     _entries.add(entry);
     _entries.sort((a, b) => b.date.compareTo(a.date));
 
-    // Save to Hive
-    await _saveEntryToHive(entry);
-
     // Sync to Firestore
     if (_syncService != null) {
       try {
@@ -633,11 +603,6 @@ class HabitDataProvider extends ChangeNotifier {
   // Reset all data
   Future<void> resetAllData() async {
     _entries.clear();
-
-    // Clear Hive data
-    if (_entriesBox != null) {
-      await _entriesBox!.clear();
-    }
 
     // Clear Firestore data if authenticated
     if (_syncService != null && _isOnline) {
@@ -739,7 +704,6 @@ class HabitDataProvider extends ChangeNotifier {
             percentage: entryData['percentage']?.toDouble() ?? 0.0,
           );
           _entries.add(entry);
-          await _saveEntryToHive(entry);
         }
       }
 
@@ -757,7 +721,6 @@ class HabitDataProvider extends ChangeNotifier {
       // Import settings
       if (data['settings'] != null) {
         _currentEntryMethod = data['settings']['entryMethod'] ?? 'grid';
-        await _saveSettingsToHive();
       }
 
       _entries.sort((a, b) => b.date.compareTo(a.date));

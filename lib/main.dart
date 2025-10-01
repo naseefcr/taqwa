@@ -1,6 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/adapters.dart';
 import 'package:provider/provider.dart';
 import 'package:taqwa/providers/habit_data_provider.dart';
 import 'package:taqwa/providers/theme_provider.dart';
@@ -20,9 +19,6 @@ void main() async {
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Initialize Hive
-  await Hive.initFlutter();
 
   runApp(const TaqwaApp());
 }
@@ -207,19 +203,8 @@ class _AuthenticatedSplashScreenState extends State<AuthenticatedSplashScreen> {
         syncService.initialize(authService.currentUser!.uid);
         habitProvider.setSyncService(syncService);
 
-        // Initialize Hive and load local data
-        await habitProvider.initializeHive();
-
-        // Try to sync with Firestore
-        try {
-          final hasInternet = await syncService.hasInternetConnection();
-          if (hasInternet) {
-            await habitProvider.syncWithFirestore();
-          }
-        } catch (e) {
-          print('Sync error during initialization: $e');
-          // Continue with local data if sync fails
-        }
+        // Initialize from Firebase
+        await habitProvider.initializeFromFirebase();
 
         // If no data exists, initialize with default data
         if (habitProvider.entries.isEmpty && habitProvider.categories.isEmpty) {
@@ -248,7 +233,6 @@ class _AuthenticatedSplashScreenState extends State<AuthenticatedSplashScreen> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<FirebaseAuthService>(context);
-    final syncService = Provider.of<FirestoreSyncService>(context);
 
     return Scaffold(
       body: Container(
@@ -282,19 +266,7 @@ class _AuthenticatedSplashScreenState extends State<AuthenticatedSplashScreen> {
                 style: const TextStyle(fontSize: 16, color: Colors.white70),
               ),
               const SizedBox(height: 48),
-              if (syncService.isSyncing)
-                const Column(
-                  children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 16),
-                    Text(
-                      'Syncing your data...',
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  ],
-                )
-              else
-                const CircularProgressIndicator(color: Colors.white),
+              const CircularProgressIndicator(color: Colors.white),
             ],
           ),
         ),

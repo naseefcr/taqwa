@@ -183,18 +183,6 @@ class _DailyScreenState extends State<DailyScreen> {
                     ),
               ),
 
-            // Sync indicator
-            if (syncService.isSyncing)
-              const Padding(
-                padding: EdgeInsets.only(right: 8.0),
-                child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              ),
 
             // Entry method selector
             PopupMenuButton<String>(

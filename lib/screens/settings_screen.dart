@@ -28,20 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
         centerTitle: true,
-        actions: [
-          // Sync status indicator
-          if (syncService.isSyncing)
-            const Padding(
-              padding: EdgeInsets.only(right: 16.0),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            ),
-        ],
+        actions: [],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -266,12 +253,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
-                if (syncStatus['isSyncing'])
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1181,7 +1162,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               'Categories: ${habitData.categories.length}\n'
                               'Entry Method: ${habitData.currentEntryMethod}\n'
                               'Online: ${syncStatus['isOnline']}\n'
-                              'Syncing: ${syncStatus['isSyncing']}\n'
                               'Last Sync: ${syncStatus['lastSyncTime']}\n'
                               'Sync Error: ${syncStatus['lastSyncError'] ?? 'None'}',
                             ),
