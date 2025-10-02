@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models.dart';
 import '../providers/habit_data_provider.dart';
+import '../data/templates.dart';
 
 class CategoryManagementScreen extends StatefulWidget {
   const CategoryManagementScreen({super.key});
@@ -31,6 +32,40 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> wit
       appBar: AppBar(
         title: const Text('Manage Categories & Items'),
         centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'switch_template') {
+                _showTemplateSwitcher(context);
+              } else if (value == 'reset_current') {
+                _showResetCurrentDialog(context);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'switch_template',
+                child: Row(
+                  children: [
+                    Icon(Icons.swap_horiz),
+                    SizedBox(width: 8),
+                    Text('Switch Template'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'reset_current',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Reset to Default'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -380,6 +415,168 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> wit
         ),
       ),
     );
+  }
+
+  void _showTemplateSwitcher(BuildContext context) {
+    final templates = HabitTemplates.getAllTemplates().where((t) => t.id != 'blank').toList();
+    Template? selectedTemplate;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Switch Template'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This will replace all current categories and items. Your existing data will be lost.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.orange,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: templates.length,
+                    itemBuilder: (context, index) {
+                      final template = templates[index];
+                      final isSelected = selectedTemplate?.id == template.id;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        elevation: isSelected ? 4 : 1,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                        child: ListTile(
+                          leading: Icon(template.icon),
+                          title: Text(template.nameEn),
+                          subtitle: Text(
+                            '${template.categories.length} categories • ${template.categories.fold<int>(0, (sum, cat) => sum + cat.items.length)} items',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          trailing: isSelected
+                              ? Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              selectedTemplate = template;
+                            });
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: selectedTemplate == null
+                  ? null
+                  : () async {
+                      Navigator.pop(context);
+                      await _applyTemplate(context, selectedTemplate!);
+                    },
+              child: const Text('Switch'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showResetCurrentDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset to Default'),
+        content: const Text(
+          'This will reset all categories and items to the default Islamic template. Your current configuration will be lost. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final defaultTemplate = HabitTemplates.getTemplateById('default_islamic');
+              await _applyTemplate(context, defaultTemplate);
+            },
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _applyTemplate(BuildContext context, Template template) async {
+    final habitProvider = Provider.of<HabitDataProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Applying template...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await habitProvider.applyTemplate(template);
+      
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Template "${template.nameEn}" applied successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to apply template: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
