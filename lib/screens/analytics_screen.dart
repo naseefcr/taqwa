@@ -677,15 +677,27 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
     for (final entry in entries) {
       if (entry.percentage >= 70) {
-        if (lastDate == null || entry.date.difference(lastDate).inDays == 1) {
-          tempStreak++;
-        } else {
+        if (lastDate == null) {
           tempStreak = 1;
+        } else {
+          final daysDifference = entry.date.difference(lastDate).inDays;
+          if (daysDifference == 1) {
+            tempStreak++;
+          } else {
+            tempStreak = 1;
+          }
         }
-        bestStreak = tempStreak > bestStreak ? tempStreak : bestStreak;
+        
+        if (tempStreak > bestStreak) {
+          bestStreak = tempStreak;
+        }
 
-        if (_isSameDay(entry.date, DateTime.now()) ||
-            entry.date.difference(DateTime.now()).inDays == -1) {
+        final today = DateTime.now();
+        final todayStart = DateTime(today.year, today.month, today.day);
+        final entryStart = DateTime(entry.date.year, entry.date.month, entry.date.day);
+        
+        if (entryStart.difference(todayStart).inDays >= -1 && 
+            entryStart.difference(todayStart).inDays <= 0) {
           currentStreak = tempStreak;
         }
       } else {
