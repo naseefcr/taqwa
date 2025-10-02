@@ -495,6 +495,10 @@ class FirestoreSyncService extends ChangeNotifier {
     }
   }
 
+  static IconData _createIconData(int codePoint, String fontFamily) {
+    return IconData(codePoint, fontFamily: fontFamily);
+  }
+
   // Apply template to user's account
   Future<void> applyTemplate(Template template) async {
     if (_currentUserId == null) return;
@@ -521,10 +525,7 @@ class FirestoreSyncService extends ChangeNotifier {
           id: categoryTemplate.id,
           nameAr: categoryTemplate.nameAr,
           nameEn: categoryTemplate.nameEn,
-          icon: IconData(
-            categoryTemplate.iconCodePoint,
-            fontFamily: categoryTemplate.iconFontFamily,
-          ),
+          icon: _createIconData(categoryTemplate.iconCodePoint, categoryTemplate.iconFontFamily),
           color: Color(categoryTemplate.colorValue),
           items: [],
           order: categoryTemplate.order,

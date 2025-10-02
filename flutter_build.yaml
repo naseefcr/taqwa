@@ -1,0 +1,5 @@
+targets:
+  $default:
+    builders:
+      flutter_tools|icon_tree_shaker:
+        enabled: false

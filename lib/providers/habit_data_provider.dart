@@ -235,6 +235,10 @@ class HabitDataProvider extends ChangeNotifier {
     }
   }
 
+  static IconData _getIconFromTemplate(int codePoint, String fontFamily) {
+    return IconData(codePoint, fontFamily: fontFamily);
+  }
+
   void _loadTemplateLocally(Template template) {
     _categories.clear();
     final now = DateTime.now();
@@ -258,10 +262,7 @@ class HabitDataProvider extends ChangeNotifier {
         id: categoryTemplate.id,
         nameAr: categoryTemplate.nameAr,
         nameEn: categoryTemplate.nameEn,
-        icon: IconData(
-          categoryTemplate.iconCodePoint,
-          fontFamily: categoryTemplate.iconFontFamily,
-        ),
+        icon: _getIconFromTemplate(categoryTemplate.iconCodePoint, categoryTemplate.iconFontFamily),
         color: Color(categoryTemplate.colorValue),
         items: items,
         order: categoryTemplate.order,

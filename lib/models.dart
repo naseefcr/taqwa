@@ -45,15 +45,16 @@ class HabitCategory {
   }
 
   factory HabitCategory.fromFirestore(Map<String, dynamic> data) {
+    final iconCodePoint = data['iconCodePoint'] ?? Icons.category.codePoint;
+    final iconFontFamily = data['iconFontFamily'] ?? 'MaterialIcons';
+    final colorValue = data['colorValue'] ?? Colors.blue.value;
+    
     return HabitCategory(
       id: data['id'] ?? '',
       nameAr: data['nameAr'] ?? '',
       nameEn: data['nameEn'] ?? '',
-      icon: IconData(
-        data['iconCodePoint'] ?? Icons.category.codePoint,
-        fontFamily: data['iconFontFamily'] ?? 'MaterialIcons',
-      ),
-      color: Color(data['colorValue'] ?? Colors.blue.value),
+      icon: _getIconFromData(iconCodePoint, iconFontFamily),
+      color: Color(colorValue),
       items: [],
       order: data['order'] ?? 0,
       isCustom: data['isCustom'] ?? false,
@@ -61,6 +62,10 @@ class HabitCategory {
       createdAt: data['createdAt'] != null ? DateTime.parse(data['createdAt']) : null,
       updatedAt: data['updatedAt'] != null ? DateTime.parse(data['updatedAt']) : null,
     );
+  }
+
+  static IconData _getIconFromData(int codePoint, String fontFamily) {
+    return IconData(codePoint, fontFamily: fontFamily);
   }
 
   HabitCategory copyWith({
