@@ -131,6 +131,14 @@ class _DailyScreenState extends State<DailyScreen> {
     final hijriDate = HijriCalendar.fromDate(_selectedDate);
     final screenSize = MediaQuery.of(context).size;
 
+    if (habitData.categories.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/template_selection');
+        }
+      });
+    }
+
     return PopScope(
       canPop: !_hasUnsavedChanges,
       onPopInvoked: (didPop) {
@@ -472,6 +480,7 @@ class _DailyScreenState extends State<DailyScreen> {
   }
 
   int _getTotalItems(HabitDataProvider habitData) {
+    if (habitData.categories.isEmpty) return 0;
     return habitData.categories
         .map((cat) => cat.items.length)
         .reduce((a, b) => a + b);

@@ -64,6 +64,7 @@ class TaqwaApp extends StatelessWidget {
             routes: {
               '/auth': (context) => const WelcomeScreen(),
               '/main': (context) => const MainScreen(),
+              '/template_selection': (context) => const TemplateSelectionScreen(),
             },
             // Add route for navigating to specific dates
             onGenerateRoute: (settings) {

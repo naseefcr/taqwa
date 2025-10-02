@@ -5,10 +5,6 @@ import '../models.dart';
 import '../services/firestore_sync_service.dart';
 
 class HabitDataProvider extends ChangeNotifier {
-  HabitDataProvider() {
-    initializeDefaultData();
-  }
-  
   List<HabitCategory> _categories = [];
   List<DailyEntry> _entries = [];
   String _currentEntryMethod = 'grid';
