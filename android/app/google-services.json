@@ -48,6 +48,42 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241212286533:android:05abe143646d6c9a36252c",
+        "android_client_info": {
+          "package_name": "com.naseefcr.taqwa"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "241212286533-1mc544ot3vas1dars82n2aqkduuve6o5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkr4I5Y5FxeZ58wyDbO6rq4BXQY2IfP0Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "241212286533-1mc544ot3vas1dars82n2aqkduuve6o5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "241212286533-497sl2kd43as1h0pj40h2j0ga047hgsd.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.taqwa"
+              }
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"
