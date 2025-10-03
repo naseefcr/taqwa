@@ -2,7 +2,7 @@ name: taqwa
 description: "An Islamic habit tracker to build Taqwa (God-consciousness) through consistent spiritual practices"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   sdk: ^3.7.2
